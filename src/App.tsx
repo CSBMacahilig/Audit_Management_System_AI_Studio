@@ -4,6 +4,8 @@ import {
   AuditFile,
   AuditFinding,
   EngagementSubTabId,
+  FULL_UNIVERSE_RECORDS,
+  IssueRegisterItem,
   LifecycleStageId,
   MainTabId,
   UniverseEntity,
@@ -31,10 +33,12 @@ import {
 } from './utils/authStore';
 import {
   fetchEngagements,
+  fetchIssues,
   fetchUniverse,
   fetchUserProfiles,
   fetchFrequencies,
   upsertEngagement,
+  upsertIssue,
   upsertWorkingNote,
   upsertFinding,
   upsertTimelineActivity,
@@ -95,6 +99,7 @@ export default function App() {
 
   // ── Audit app state ───────────────────────────────────────────────────────
   const [engagements, setEngagements] = useState<AuditEngagement[]>([]);
+  const [issues, setIssues] = useState<IssueRegisterItem[]>([]);
   const [universe, setUniverse] = useState<UniverseEntity[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -114,11 +119,13 @@ export default function App() {
     setDataLoading(true);
     Promise.all([
       fetchEngagements(),
+      fetchIssues(),
       fetchUniverse(),
       fetchUserProfiles(),
       fetchFrequencies(),
-    ]).then(([engs, uni, profiles, freq]) => {
+    ]).then(([engs, iss, uni, profiles, freq]) => {
       setEngagements(engs);
+      setIssues(iss);
       setUniverse(uni);
       setUserProfiles(profiles);
       setCurrentUser(profiles[0] ?? FALLBACK_USER);
@@ -129,6 +136,11 @@ export default function App() {
       setDataLoading(false);
     });
   }, [authSession]);
+
+  const handleUpdateIssue = (issue: IssueRegisterItem) => {
+    setIssues((prev) => prev.map((i) => i.id === issue.id ? issue : i));
+    upsertIssue(issue);
+  };
 
   // Navigation & Lifecycle Progress State
   const [activeTab, setActiveTab] = useState<MainTabId>('overview');
@@ -646,13 +658,13 @@ export default function App() {
             : activeLifecycleStage - 1
         }
         onSelectLifecycleStage={handleSelectLifecycleStage}
-        currentUser={currentUser ?? userProfiles[0]}
+        currentUser={currentUser ?? FALLBACK_USER}
         onChangeUser={setCurrentUser}
+        userProfiles={userProfiles}
         accessActive={accessActive}
         onToggleAccess={() => setAccessActive((prev) => !prev)}
         selectedEngagement={activeTab === 'fieldwork' ? selectedEngagement : null}
         onAdvanceEngagementStage={handleAdvanceEngagementStage}
-        // Auth props
         authSession={authSession}
         onLogout={handleLogout}
         onOpenAdminPanel={() => setShowAdminPanel(true)}
@@ -671,6 +683,7 @@ export default function App() {
         {activeTab === 'universe' && (
           <AuditUniverseView
             universe={universe}
+            universeRecords={FULL_UNIVERSE_RECORDS}
             frequencies={frequencies}
             isReauditMode={activeLifecycleStage === 7}
           />
@@ -680,6 +693,7 @@ export default function App() {
           <AnnualPlanView
             engagements={engagements}
             universe={universe}
+            userProfiles={userProfiles}
             onSelectEngagement={handleSelectEngagement}
             onAddEngagement={(newEng) => {
               upsertEngagement(newEng);
@@ -704,8 +718,9 @@ export default function App() {
             onSelectEngagement={handleSelectEngagement}
             activeSubTab={activeSubTab}
             onSelectSubTab={handleSelectSubTab}
-            currentUser={currentUser ?? userProfiles[0]}
+            currentUser={currentUser ?? FALLBACK_USER}
             onChangeUser={setCurrentUser}
+            userProfiles={userProfiles}
             accessActive={accessActive}
             onApproveWorkingNote={handleApproveWorkingNote}
             onCompleteActivity={handleCompleteActivity}
@@ -721,6 +736,8 @@ export default function App() {
         {activeTab === 'issues' && (
           <IssuesView
             engagements={engagements}
+            issues={issues}
+            onUpdateIssue={handleUpdateIssue}
             activeLifecycleStage={activeLifecycleStage}
             onValidateAndCloseFinding={handleValidateAndCloseFinding}
           />
@@ -738,8 +755,9 @@ export default function App() {
           activeTab === 'access') && (
           <MasterDataSetupAccessView
             tab={activeTab}
-            currentUser={currentUser ?? userProfiles[0]}
+            currentUser={currentUser ?? FALLBACK_USER}
             onChangeUser={setCurrentUser}
+            userProfiles={userProfiles}
             accessActive={accessActive}
             onToggleAccess={() => setAccessActive((prev) => !prev)}
             onSelectTab={handleSelectTab}

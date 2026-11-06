@@ -7,7 +7,6 @@ import {
   LifecycleStageId,
   RiskLevel,
   UserProfile,
-  USERS,
   WorkingNote,
 } from '../data/auditData';
 import {
@@ -25,6 +24,7 @@ interface FieldworkViewProps {
   onSelectSubTab: (subTab: EngagementSubTabId) => void;
   currentUser: UserProfile;
   onChangeUser: (user: UserProfile) => void;
+  userProfiles: UserProfile[];
   accessActive?: boolean;
   onApproveWorkingNote: (
     engagementId: string,
@@ -75,6 +75,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   onSelectSubTab,
   currentUser,
   onChangeUser,
+  userProfiles,
   accessActive = false,
   onApproveWorkingNote,
   onCompleteActivity,
@@ -284,12 +285,12 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
               id="working-as-select"
               value={currentUser.id}
               onChange={(e) => {
-                const found = USERS.find((u) => u.id === e.target.value);
+                const found = userProfiles.find((u) => u.id === e.target.value);
                 if (found) onChangeUser(found);
               }}
               className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-md text-[13px] font-medium text-slate-900 focus:outline-none focus:border-[#542D84]"
             >
-              {USERS.map((u) => (
+              {userProfiles.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} – {u.roleTitle}
                 </option>
@@ -647,8 +648,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
           <button
             type="button"
             onClick={() => {
-              const idx = USERS.findIndex((u) => u.id === currentUser.id);
-              const next = USERS[(idx + 1) % USERS.length];
+              const idx = userProfiles.findIndex((u) => u.id === currentUser.id);
+              const next = userProfiles[(idx + 1) % userProfiles.length];
               onChangeUser(next);
             }}
             className="underline hover:text-slate-900 ml-1 cursor-pointer"

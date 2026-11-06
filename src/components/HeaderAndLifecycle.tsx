@@ -4,7 +4,6 @@ import {
   LifecycleStageId,
   MainTabId,
   UserProfile,
-  USERS,
   AuditEngagement,
 } from '../data/auditData';
 import { Check } from 'lucide-react';
@@ -18,6 +17,7 @@ interface HeaderAndLifecycleProps {
   onSelectLifecycleStage: (stageId: LifecycleStageId) => void;
   currentUser: UserProfile;
   onChangeUser: (user: UserProfile) => void;
+  userProfiles: UserProfile[];
   accessActive: boolean;
   onToggleAccess: () => void;
   selectedEngagement: AuditEngagement | null;
@@ -48,6 +48,7 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   onSelectLifecycleStage,
   currentUser,
   onChangeUser,
+  userProfiles,
   accessActive,
   onToggleAccess,
   authSession,
@@ -186,7 +187,7 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
                   <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
                     Select Active Audit Role
                   </div>
-                  {USERS.map((u) => (
+                  {userProfiles.map((u) => (
                     <button
                       key={u.id}
                       type="button"

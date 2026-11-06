@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
 import {
   AuditEngagement,
-  FULL_UNIVERSE_RECORDS,
-  INITIAL_ENGAGEMENTS,
-  INITIAL_ISSUES_REGISTER,
   IssueRegisterItem,
   LifecycleStageId,
   MainTabId,
   RiskLevel,
   UniverseEntity,
   UniverseRecord,
-  USERS,
   UserProfile,
 } from '../data/auditData';
 import {
@@ -476,10 +472,11 @@ export const OverviewView: React.FC<{
 // 2. AUDIT UNIVERSE VIEW (Exact match to Audit-Management-System (8).png)
 export const AuditUniverseView: React.FC<{
   universe: UniverseEntity[];
+  universeRecords: UniverseRecord[];
   frequencies: { critical: number; high: number; medium: number; low: number };
   isReauditMode?: boolean;
-}> = ({ frequencies }) => {
-  const [records, setRecords] = useState<UniverseRecord[]>(FULL_UNIVERSE_RECORDS);
+}> = ({ frequencies, universeRecords }) => {
+  const [records, setRecords] = useState<UniverseRecord[]>(universeRecords);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All types');
   const [riskFilter, setRiskFilter] = useState('All risk levels');
@@ -1265,10 +1262,12 @@ export const TimelineView: React.FC<{
 // 4. ISSUES VIEW (Exact match to Audit-Management-System (5).png)
 export const IssuesView: React.FC<{
   engagements: AuditEngagement[];
+  issues: IssueRegisterItem[];
+  onUpdateIssue: (issue: IssueRegisterItem) => void;
   activeLifecycleStage: LifecycleStageId;
   onValidateAndCloseFinding: (engagementId: string, findingId: string) => void;
-}> = ({ activeLifecycleStage, onValidateAndCloseFinding }) => {
-  const [issues, setIssues] = useState<IssueRegisterItem[]>(INITIAL_ISSUES_REGISTER);
+}> = ({ activeLifecycleStage, onValidateAndCloseFinding, issues: initialIssues, onUpdateIssue }) => {
+  const [issues, setIssues] = useState<IssueRegisterItem[]>(initialIssues);
   const [filterTab, setFilterTab] = useState<string>(
     activeLifecycleStage === 6 ? 'For validation' : 'Open'
   );
@@ -1640,10 +1639,11 @@ export const MasterDataSetupAccessView: React.FC<{
   tab: 'master-data' | 'setup' | 'access';
   currentUser: UserProfile;
   onChangeUser: (u: UserProfile) => void;
+  userProfiles: UserProfile[];
   accessActive?: boolean;
   onToggleAccess?: () => void;
   onSelectTab?: (tab: MainTabId) => void;
-}> = ({ tab, currentUser, onChangeUser, accessActive, onToggleAccess, onSelectTab }) => {
+}> = ({ tab, currentUser, onChangeUser, userProfiles, accessActive, onToggleAccess, onSelectTab }) => {
   // Master data state matching Audit-Management-System (4).png & (6).png
   const [entityTypes, setEntityTypes] = useState([
     'Department',
@@ -3037,10 +3037,10 @@ export const MasterDataSetupAccessView: React.FC<{
           <select
             aria-label="Select simulated user"
             value={currentUser.id}
-            onChange={(e) => { const found = USERS.find((u) => u.id === e.target.value); if (found) onChangeUser(found); }}
+            onChange={(e) => { const found = userProfiles.find((u) => u.id === e.target.value); if (found) onChangeUser(found); }}
             className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800"
           >
-            {USERS.map((u) => (
+            {userProfiles.map((u) => (
               <option key={u.id} value={u.id}>{u.name} — {u.headerSubtitle}</option>
             ))}
           </select>
@@ -3314,7 +3314,7 @@ export const MasterDataSetupAccessView: React.FC<{
                           </button>
                         )}
                         <button type="button"
-                          onClick={() => { const found = USERS.find((u) => u.name === usr.name); if (found) { onChangeUser(found); } else { onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: usr.roles.join(', '), department: usr.title, canApproveHead: usr.roles.includes('Chief Audit Executive'), canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'), canApproveCAE: usr.roles.includes('Chief Audit Executive') }); } }}
+                          onClick={() => { const found = userProfiles.find((u: UserProfile) => u.name === usr.name); if (found) { onChangeUser(found); } else { onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: usr.roles.join(', '), department: usr.title, canApproveHead: usr.roles.includes('Chief Audit Executive'), canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'), canApproveCAE: usr.roles.includes('Chief Audit Executive') }); } }}
                           className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
                           Impersonate
                         </button>

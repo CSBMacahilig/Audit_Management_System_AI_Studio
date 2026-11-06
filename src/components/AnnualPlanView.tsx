@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { AuditEngagement, RiskLevel, UniverseEntity, USERS } from '../data/auditData';
+import { AuditEngagement, RiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 
 interface AnnualPlanViewProps {
   engagements: AuditEngagement[];
   universe: UniverseEntity[];
+  userProfiles: UserProfile[];
   onSelectEngagement: (engagement: AuditEngagement) => void;
   onAddEngagement: (newEng: AuditEngagement) => void;
   onAutoAssignLeads: () => void;
@@ -12,6 +13,7 @@ interface AnnualPlanViewProps {
 
 export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   engagements,
+  userProfiles,
   onSelectEngagement,
   onAddEngagement,
   onAutoAssignLeads,
@@ -957,7 +959,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     onChange={(e) => setNewLead(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   >
-                    {USERS.map((u) => (
+                    {userProfiles.map((u) => (
                       <option key={u.id} value={u.name}>
                         {u.name}
                       </option>

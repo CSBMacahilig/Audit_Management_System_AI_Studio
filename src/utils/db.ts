@@ -11,6 +11,9 @@
  */
 
 import { supabase } from './supabaseClient';
+
+// Log the Supabase URL on load so we can confirm the right project is connected
+console.log('[Supabase] connecting to: https://lpsxrwesflgkoosncyrc.supabase.co');
 import type {
   AuditEngagement,
   AuditFinding,
