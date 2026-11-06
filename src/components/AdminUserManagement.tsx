@@ -50,7 +50,7 @@ export const AdminUserManagement: React.FC<Props> = ({ session, onClose }) => {
   const [resetLoading, setResetLoading] = useState(false);
 
   const refresh = useCallback(() => {
-    setUsers(loadUsers());
+    loadUsers().then(setUsers);
   }, []);
 
   useEffect(() => {
@@ -89,8 +89,8 @@ export const AdminUserManagement: React.FC<Props> = ({ session, onClose }) => {
   };
 
   // ── Unlock ───────────────────────────────────────────────────────────────
-  const handleUnlock = (userId: string, name: string) => {
-    const result = adminUnlockUser(session, userId);
+  const handleUnlock = async (userId: string, name: string) => {
+    const result = await adminUnlockUser(session, userId);
     if (result.success) {
       notify('success', `IA-9: Account "${name}" unlocked. Failed-login counter reset.`);
       refresh();
@@ -100,8 +100,8 @@ export const AdminUserManagement: React.FC<Props> = ({ session, onClose }) => {
   };
 
   // ── Toggle active ────────────────────────────────────────────────────────
-  const handleToggleActive = (userId: string, name: string, currentlyActive: boolean) => {
-    const result = adminToggleActive(session, userId);
+  const handleToggleActive = async (userId: string, name: string, currentlyActive: boolean) => {
+    const result = await adminToggleActive(session, userId);
     if (result.success) {
       notify('success', `Account "${name}" ${currentlyActive ? 'deactivated' : 'reactivated'}.`);
       refresh();

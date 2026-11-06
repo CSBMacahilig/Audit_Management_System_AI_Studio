@@ -1,19 +1,12 @@
 /**
- * authStore.ts — Client-side Authentication Store
+ * authStore.ts — Supabase-backed Authentication Store
  *
- * Provides a simple but realistic login/session system with:
- *  • SHA-256 password hashing (Web Crypto SubtleCrypto)
- *  • localStorage persistence for the user registry
- *  • IA-8: account lockout after N failed attempts
- *  • IA-9: admin-only unlock
- *  • SM-4: single active session per user (session token in sessionStorage)
- *  • PM-3: force password change flag on first login
- *  • LAC-1: role enforcement — only 'admin' role may add/manage users
- *
- * Roles in this system:
- *   'admin' — can log in AND manage all users (add/edit/deactivate)
- *   'user'  — can log in; cannot manage other users
+ * Replaces the previous localStorage-only implementation.
+ * All user records are persisted in the `system_users` Supabase table.
+ * Sessions are still kept in sessionStorage (SM-4: tab-scoped, not synced server-side).
  */
+
+import { supabase } from './supabaseClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -23,18 +16,18 @@ export type SystemRole = 'admin' | 'user';
 
 export interface SystemUser {
   id: string;
-  username: string;            // unique, lowercase (IA-1/IA-2)
+  username: string;
   fullName: string;
   email: string;
   role: SystemRole;
-  passwordHash: string;        // SHA-256 hex (never plaintext)
-  isActive: boolean;           // AL-4.7 account status
-  isLocked: boolean;           // IA-9
-  failedLoginCount: number;    // IA-8
-  requiresPasswordChange: boolean; // PM-3 first-login force
-  createdAt: string;           // ISO 8601
-  lastLogin: string | null;    // AL-4.4
-  modifiedAt: string;          // AL-4.5
+  passwordHash: string;
+  isActive: boolean;
+  isLocked: boolean;
+  failedLoginCount: number;
+  requiresPasswordChange: boolean;
+  createdAt: string;
+  lastLogin: string | null;
+  modifiedAt: string;
 }
 
 export interface AuthSession {
@@ -42,8 +35,8 @@ export interface AuthSession {
   username: string;
   role: SystemRole;
   fullName: string;
-  token: string;               // 32-byte hex (SM-4)
-  issuedAt: string;            // ISO 8601
+  token: string;
+  issuedAt: string;
   requiresPasswordChange: boolean;
 }
 
@@ -56,18 +49,39 @@ export interface LoginResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DB row → domain type mapper
+// ─────────────────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUser(row: any): SystemUser {
+  return {
+    id: row.id,
+    username: row.username,
+    fullName: row.full_name,
+    email: row.email,
+    role: row.role as SystemRole,
+    passwordHash: row.password_hash,
+    isActive: row.is_active,
+    isLocked: row.is_locked,
+    failedLoginCount: row.failed_login_count,
+    requiresPasswordChange: row.requires_password_change,
+    createdAt: row.created_at,
+    lastLogin: row.last_login,
+    modifiedAt: row.modified_at,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STORE_KEY = 'csb_auth_users';
 const SESSION_KEY = 'csb_auth_session';
-const MAX_FAILED = 3; // IA-8
+const MAX_FAILED = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crypto helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Hash a password with SHA-256 via SubtleCrypto. Returns a hex string. */
 export async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
@@ -77,7 +91,6 @@ export async function hashPassword(password: string): Promise<string> {
     .join('');
 }
 
-/** Generate a random 32-byte hex token (SM-4 session token). */
 export function randomToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -85,22 +98,8 @@ export function randomToken(): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Persistence (localStorage)
+// Session (sessionStorage — tab-scoped)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export function loadUsers(): SystemUser[] {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as SystemUser[];
-  } catch {
-    return [];
-  }
-}
-
-export function saveUsers(users: SystemUser[]): void {
-  localStorage.setItem(STORE_KEY, JSON.stringify(users));
-}
 
 export function loadSession(): AuthSession | null {
   try {
@@ -121,58 +120,60 @@ export function clearSession(): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seed: create the default admin if the store is empty
+// Seed: create the default admin if the table is empty
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Ensures the default admin account exists.
- * Called once at app startup.
- * Admin: username=admin  password=csbadmin123
- */
 export async function seedDefaultAdmin(): Promise<void> {
-  const users = loadUsers();
-  const already = users.find((u) => u.username === 'admin');
-  if (already) return;
+  const { data, error } = await supabase
+    .from('system_users')
+    .select('id')
+    .eq('username', 'admin')
+    .maybeSingle();
+
+  if (error) {
+    console.error('seedDefaultAdmin: could not query system_users:', error.message);
+    return;
+  }
+  if (data) return; // already exists
 
   const hash = await hashPassword('csbadmin123');
-  const admin: SystemUser = {
+  const now = new Date().toISOString();
+  await supabase.from('system_users').insert({
     id: 'sys-admin-001',
     username: 'admin',
-    fullName: 'System Administrator',
+    full_name: 'System Administrator',
     email: 'admin@citysavings.com.ph',
     role: 'admin',
-    passwordHash: hash,
-    isActive: true,
-    isLocked: false,
-    failedLoginCount: 0,
-    requiresPasswordChange: false,
-    createdAt: new Date().toISOString(),
-    lastLogin: null,
-    modifiedAt: new Date().toISOString(),
-  };
-  saveUsers([...users, admin]);
+    password_hash: hash,
+    is_active: true,
+    is_locked: false,
+    failed_login_count: 0,
+    requires_password_change: false,
+    created_at: now,
+    last_login: null,
+    modified_at: now,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * IA-1/IA-7/IA-8/SM-4: Authenticate a user.
- * Returns a LoginResult — always with a generic error message (IA-7).
- */
 export async function login(username: string, password: string): Promise<LoginResult> {
-  const GENERIC = 'Login failed. Invalid user ID or password.'; // IA-7
+  const GENERIC = 'Login failed. Invalid user ID or password.';
 
-  const users = loadUsers();
-  const user = users.find((u) => u.username.toLowerCase() === username.trim().toLowerCase());
+  const { data: row, error } = await supabase
+    .from('system_users')
+    .select('*')
+    .eq('username', username.trim().toLowerCase())
+    .maybeSingle();
 
-  // IA-7: do not reveal whether username exists
-  if (!user || !user.isActive) {
-    return { success: false, error: GENERIC };
-  }
+  if (error || !row) return { success: false, error: GENERIC };
 
-  // IA-9: locked accounts require admin intervention
+  const user = rowToUser(row);
+
+  if (!user.isActive) return { success: false, error: GENERIC };
+
   if (user.isLocked) {
     return {
       success: false,
@@ -186,15 +187,12 @@ export async function login(username: string, password: string): Promise<LoginRe
   const attemptedHash = await hashPassword(password);
 
   if (attemptedHash !== user.passwordHash) {
-    // IA-8: increment counter, lock at threshold
     const newCount = user.failedLoginCount + 1;
     const shouldLock = newCount >= MAX_FAILED;
-    const updated = users.map((u) =>
-      u.id === user.id
-        ? { ...u, failedLoginCount: newCount, isLocked: shouldLock }
-        : u
-    );
-    saveUsers(updated);
+    await supabase
+      .from('system_users')
+      .update({ failed_login_count: newCount, is_locked: shouldLock, modified_at: new Date().toISOString() })
+      .eq('id', user.id);
 
     if (shouldLock) {
       return {
@@ -208,16 +206,15 @@ export async function login(username: string, password: string): Promise<LoginRe
     return { success: false, error: GENERIC };
   }
 
-  // Success — reset counter, update last login, revoke any old session (SM-4)
   const token = randomToken();
   const now = new Date().toISOString();
-  const updated = users.map((u) =>
-    u.id === user.id
-      ? { ...u, failedLoginCount: 0, isLocked: false, lastLogin: now }
-      : u
-  );
-  saveUsers(updated);
-  clearSession(); // SM-4: invalidate previous session
+
+  await supabase
+    .from('system_users')
+    .update({ failed_login_count: 0, is_locked: false, last_login: now, modified_at: now })
+    .eq('id', user.id);
+
+  clearSession();
 
   const session: AuthSession = {
     userId: user.id,
@@ -230,48 +227,37 @@ export async function login(username: string, password: string): Promise<LoginRe
   };
   saveSession(session);
 
-  return {
-    success: true,
-    session,
-    requiresPasswordChange: user.requiresPasswordChange,
-  };
+  return { success: true, session, requiresPasswordChange: user.requiresPasswordChange };
 }
 
-/** Logout: invalidate session server-side (SM-4). */
 export function logout(): void {
   clearSession();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin-only user management  (LAC-1: only 'admin' role may call these)
+// Admin-only user management
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** LAC-1/IA-2: Add a new user. Only callable by an admin session. */
+export async function loadUsers(): Promise<SystemUser[]> {
+  const { data, error } = await supabase.from('system_users').select('*').order('created_at');
+  if (error) { console.error('loadUsers:', error.message); return []; }
+  return (data ?? []).map(rowToUser);
+}
+
 export async function adminAddUser(
   session: AuthSession,
-  data: {
-    username: string;
-    fullName: string;
-    email: string;
-    role: SystemRole;
-    password: string;
-  }
+  data: { username: string; fullName: string; email: string; role: SystemRole; password: string }
 ): Promise<{ success: boolean; error?: string }> {
-  if (session.role !== 'admin') {
-    return { success: false, error: 'Access denied. Admin role required.' };
-  }
+  if (session.role !== 'admin') return { success: false, error: 'Access denied. Admin role required.' };
 
-  const users = loadUsers();
+  const { data: existing } = await supabase
+    .from('system_users')
+    .select('id')
+    .eq('username', data.username.trim().toLowerCase())
+    .maybeSingle();
 
-  // IA-2: unique username
-  const taken = users.some(
-    (u) => u.username.toLowerCase() === data.username.trim().toLowerCase()
-  );
-  if (taken) {
-    return {
-      success: false,
-      error: `Username "${data.username}" already exists. Each user must have a unique username.`,
-    };
+  if (existing) {
+    return { success: false, error: `Username "${data.username}" already exists. Each user must have a unique username.` };
   }
 
   if (!data.password || data.password.length < 8) {
@@ -280,148 +266,115 @@ export async function adminAddUser(
 
   const hash = await hashPassword(data.password);
   const now = new Date().toISOString();
-  const newUser: SystemUser = {
+
+  const { error: insertErr } = await supabase.from('system_users').insert({
     id: `usr-${Date.now()}`,
     username: data.username.trim().toLowerCase(),
-    fullName: data.fullName.trim(),
+    full_name: data.fullName.trim(),
     email: data.email.trim().toLowerCase(),
     role: data.role,
-    passwordHash: hash,
-    isActive: true,
-    isLocked: false,
-    failedLoginCount: 0,
-    requiresPasswordChange: true, // PM-3: force change on first login
-    createdAt: now,
-    lastLogin: null,
-    modifiedAt: now,
-  };
+    password_hash: hash,
+    is_active: true,
+    is_locked: false,
+    failed_login_count: 0,
+    requires_password_change: true,
+    created_at: now,
+    last_login: null,
+    modified_at: now,
+  });
 
-  saveUsers([...users, newUser]);
+  if (insertErr) return { success: false, error: insertErr.message };
   return { success: true };
 }
 
-/** IA-9/LAC-1: Admin unlocks a locked user account. */
-export function adminUnlockUser(
+export async function adminUnlockUser(
   session: AuthSession,
   targetUserId: string
-): { success: boolean; error?: string } {
-  if (session.role !== 'admin') {
-    return { success: false, error: 'Access denied. Admin role required.' };
-  }
-  const users = loadUsers();
-  const updated = users.map((u) =>
-    u.id === targetUserId
-      ? { ...u, isLocked: false, failedLoginCount: 0, modifiedAt: new Date().toISOString() }
-      : u
-  );
-  saveUsers(updated);
+): Promise<{ success: boolean; error?: string }> {
+  if (session.role !== 'admin') return { success: false, error: 'Access denied. Admin role required.' };
+  const { error } = await supabase
+    .from('system_users')
+    .update({ is_locked: false, failed_login_count: 0, modified_at: new Date().toISOString() })
+    .eq('id', targetUserId);
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
-/** LAC-1: Admin toggles a user's active status (deactivate / reactivate). */
-export function adminToggleActive(
+export async function adminToggleActive(
   session: AuthSession,
   targetUserId: string
-): { success: boolean; error?: string } {
-  if (session.role !== 'admin') {
-    return { success: false, error: 'Access denied. Admin role required.' };
-  }
-  // Prevent admin from deactivating their own account
-  if (targetUserId === session.userId) {
-    return { success: false, error: 'You cannot deactivate your own account.' };
-  }
-  const users = loadUsers();
-  const updated = users.map((u) =>
-    u.id === targetUserId
-      ? { ...u, isActive: !u.isActive, modifiedAt: new Date().toISOString() }
-      : u
-  );
-  saveUsers(updated);
+): Promise<{ success: boolean; error?: string }> {
+  if (session.role !== 'admin') return { success: false, error: 'Access denied. Admin role required.' };
+  if (targetUserId === session.userId) return { success: false, error: 'You cannot deactivate your own account.' };
+
+  const { data: row, error: fetchErr } = await supabase
+    .from('system_users')
+    .select('is_active')
+    .eq('id', targetUserId)
+    .single();
+  if (fetchErr || !row) return { success: false, error: fetchErr?.message ?? 'User not found.' };
+
+  const { error } = await supabase
+    .from('system_users')
+    .update({ is_active: !row.is_active, modified_at: new Date().toISOString() })
+    .eq('id', targetUserId);
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
-/** LAC-1: Admin resets a user's password and forces change on next login. */
 export async function adminResetPassword(
   session: AuthSession,
   targetUserId: string,
   newPassword: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (session.role !== 'admin') {
-    return { success: false, error: 'Access denied. Admin role required.' };
-  }
-  if (!newPassword || newPassword.length < 8) {
-    return { success: false, error: 'New password must be at least 8 characters.' };
-  }
+  if (session.role !== 'admin') return { success: false, error: 'Access denied. Admin role required.' };
+  if (!newPassword || newPassword.length < 8) return { success: false, error: 'New password must be at least 8 characters.' };
+
   const hash = await hashPassword(newPassword);
-  const users = loadUsers();
-  const updated = users.map((u) =>
-    u.id === targetUserId
-      ? {
-          ...u,
-          passwordHash: hash,
-          requiresPasswordChange: true, // PM-3
-          isLocked: false,
-          failedLoginCount: 0,
-          modifiedAt: new Date().toISOString(),
-        }
-      : u
-  );
-  saveUsers(updated);
+  const { error } = await supabase
+    .from('system_users')
+    .update({
+      password_hash: hash,
+      requires_password_change: true,
+      is_locked: false,
+      failed_login_count: 0,
+      modified_at: new Date().toISOString(),
+    })
+    .eq('id', targetUserId);
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
-/** PM-3/PM-10: User changes their own password after login. */
 export async function changeOwnPassword(
   session: AuthSession,
   currentPassword: string,
   newPassword: string
 ): Promise<{ success: boolean; error?: string }> {
-  const users = loadUsers();
-  const user = users.find((u) => u.id === session.userId);
-  if (!user) return { success: false, error: 'User not found.' };
+  const { data: row, error: fetchErr } = await supabase
+    .from('system_users')
+    .select('password_hash')
+    .eq('id', session.userId)
+    .single();
+  if (fetchErr || !row) return { success: false, error: 'User not found.' };
 
-  // Verify current password
   const currentHash = await hashPassword(currentPassword);
-  if (currentHash !== user.passwordHash) {
-    return { success: false, error: 'Current password is incorrect.' };
-  }
+  if (currentHash !== row.password_hash) return { success: false, error: 'Current password is incorrect.' };
 
-  // PM-1: enforce minimum length
-  if (newPassword.length < 8) {
-    return { success: false, error: 'New password must be at least 8 characters.' };
-  }
-
-  // PM-2: complexity
+  if (newPassword.length < 8) return { success: false, error: 'New password must be at least 8 characters.' };
   if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-    return {
-      success: false,
-      error: 'New password must contain letters and numbers.',
-    };
+    return { success: false, error: 'New password must contain letters and numbers.' };
   }
 
   const newHash = await hashPassword(newPassword);
+  if (newHash === row.password_hash) return { success: false, error: 'New password must differ from your current password.' };
 
-  // PM-5: prevent reuse — check last 6 in history (passwordHistory not stored in minimal store,
-  // but we check against the current hash at minimum)
-  if (newHash === user.passwordHash) {
-    return { success: false, error: 'New password must differ from your current password.' };
-  }
+  const { error } = await supabase
+    .from('system_users')
+    .update({ password_hash: newHash, requires_password_change: false, modified_at: new Date().toISOString() })
+    .eq('id', session.userId);
+  if (error) return { success: false, error: error.message };
 
-  const updated = users.map((u) =>
-    u.id === session.userId
-      ? {
-          ...u,
-          passwordHash: newHash,
-          requiresPasswordChange: false,
-          modifiedAt: new Date().toISOString(),
-        }
-      : u
-  );
-  saveUsers(updated);
-
-  // Update session flag
   const updatedSession: AuthSession = { ...session, requiresPasswordChange: false };
   saveSession(updatedSession);
-
   return { success: true };
 }

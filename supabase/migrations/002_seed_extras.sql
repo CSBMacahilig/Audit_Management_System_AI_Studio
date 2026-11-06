@@ -1,0 +1,4 @@
+-- ============================================================
+-- 002_seed_extras.sql — DEPRECATED
+-- No seed data. The team will input all records via the application.
+-- ============================================================

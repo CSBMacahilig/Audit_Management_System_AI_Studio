@@ -4,13 +4,10 @@ import {
   AuditFile,
   AuditFinding,
   EngagementSubTabId,
-  INITIAL_ENGAGEMENTS,
-  INITIAL_UNIVERSE,
   LifecycleStageId,
   MainTabId,
   UniverseEntity,
   UserProfile,
-  USERS,
   WorkingNote,
 } from './data/auditData';
 import { HeaderAndLifecycle } from './components/HeaderAndLifecycle';
@@ -32,6 +29,20 @@ import {
   logout,
   seedDefaultAdmin,
 } from './utils/authStore';
+import {
+  fetchEngagements,
+  fetchUniverse,
+  fetchUserProfiles,
+  fetchFrequencies,
+  upsertEngagement,
+  upsertWorkingNote,
+  upsertFinding,
+  upsertTimelineActivity,
+  insertFile,
+  insertActivityLog,
+  saveFrequencies,
+  AuditFrequencies,
+} from './utils/db';
 
 export default function App() {
   // ── Auth state ────────────────────────────────────────────────────────────
@@ -63,23 +74,44 @@ export default function App() {
   };
 
   // ── Audit app state ───────────────────────────────────────────────────────
-  const [engagements, setEngagements] = useState<AuditEngagement[]>(INITIAL_ENGAGEMENTS);
-  const [universe] = useState<UniverseEntity[]>(INITIAL_UNIVERSE);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(USERS[0]);
+  const [engagements, setEngagements] = useState<AuditEngagement[]>([]);
+  const [universe, setUniverse] = useState<UniverseEntity[]>([]);
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [accessActive, setAccessActive] = useState<boolean>(false);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  const [frequencies, setFrequenciesState] = useState<AuditFrequencies>({
+    critical: 6,
+    high: 12,
+    medium: 24,
+    low: 36,
+  });
+
+  // Load all data from Supabase once authenticated
+  useEffect(() => {
+    if (!authSession) return;
+    setDataLoading(true);
+    Promise.all([
+      fetchEngagements(),
+      fetchUniverse(),
+      fetchUserProfiles(),
+      fetchFrequencies(),
+    ]).then(([engs, uni, profiles, freq]) => {
+      setEngagements(engs);
+      setUniverse(uni);
+      setUserProfiles(profiles);
+      setCurrentUser(profiles[0] ?? null);
+      setFrequenciesState(freq);
+      setDataLoading(false);
+    });
+  }, [authSession]);
 
   // Navigation & Lifecycle Progress State
   const [activeTab, setActiveTab] = useState<MainTabId>('overview');
   const [activeLifecycleStage, setActiveLifecycleStage] = useState<LifecycleStageId>(1);
   const [selectedEngagementId, setSelectedEngagementId] = useState<string | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<EngagementSubTabId>('dashboard');
-
-  const [frequencies, setFrequencies] = useState({
-    critical: 6,
-    high: 12,
-    medium: 24,
-    low: 36,
-  });
 
   const selectedEngagement =
     engagements.find((e) => e.id === selectedEngagementId) || null;
@@ -192,21 +224,22 @@ export default function App() {
             : nextStage >= 6
             ? 'Closed'
             : 'Reporting';
-        return {
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:10',
+          actor: currentUser?.name ?? '',
+          action: `Engagement lifecycle advanced to Stage 0${nextStage}`,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           lifecycleStage: nextStage,
           status: nextStatus,
           fieldworkPct: nextStage >= 3 ? Math.max(eng.fieldworkPct, 75) : eng.fieldworkPct,
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:10',
-              actor: currentUser.name,
-              action: `Engagement lifecycle advanced to Stage 0${nextStage}`,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(eng.id, logEntry);
+        return updated;
       })
     );
   };
@@ -231,21 +264,25 @@ export default function App() {
             : wn
         );
         const noteObj = eng.workingNotes.find((w) => w.id === noteId);
-        return {
+        const updatedNote = updatedNotes.find((w) => w.id === noteId);
+        if (updatedNote) upsertWorkingNote(engagementId, updatedNote);
+
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:15',
+          actor: currentUser?.name ?? '',
+          action: `${noteObj?.ref || 'Working note'} marked as ${newStatus}`,
+          detail: comment ? `Reviewer note: ${comment}` : undefined,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           fieldworkPct: Math.min(100, eng.fieldworkPct + 12),
           workingNotes: updatedNotes,
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:15',
-              actor: currentUser.name,
-              action: `${noteObj?.ref || 'Working note'} marked as ${newStatus}`,
-              detail: comment ? `Reviewer note: ${comment}` : undefined,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -255,23 +292,28 @@ export default function App() {
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const actObj = eng.timelineActivities.find((a) => a.id === activityId);
-        return {
-          ...eng,
-          timelineActivities: eng.timelineActivities.map((a) =>
-            a.id === activityId
-              ? { ...a, status: 'Completed', completedDate: '4 Oct 2026' }
-              : a
-          ),
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:18',
-              actor: currentUser.name,
-              action: `Timeline activity completed: ${actObj?.name || ''}`,
-            },
-            ...eng.activityLog,
-          ],
+        const updatedActivities = eng.timelineActivities.map((a) =>
+          a.id === activityId
+            ? { ...a, status: 'Completed' as const, completedDate: '4 Oct 2026' }
+            : a
+        );
+        const updatedActivity = updatedActivities.find((a) => a.id === activityId);
+        if (updatedActivity) upsertTimelineActivity(engagementId, updatedActivity);
+
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:18',
+          actor: currentUser?.name ?? '',
+          action: `Timeline activity completed: ${actObj?.name || ''}`,
         };
+        const updated: AuditEngagement = {
+          ...eng,
+          timelineActivities: updatedActivities,
+          activityLog: [logEntry, ...eng.activityLog],
+        };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -293,7 +335,7 @@ export default function App() {
           ref,
           title,
           controlArea,
-          author: currentUser.name,
+          author: currentUser?.name ?? '',
           status: 'For head review',
           hasException,
           updatedAt: '4 Oct 2026, 14:20',
@@ -302,19 +344,22 @@ export default function App() {
             ? 'Exception noted during sample walk-through.'
             : 'Controls operating effectively without exception.',
         };
-        return {
+        upsertWorkingNote(engagementId, newNote);
+
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:20',
+          actor: currentUser?.name ?? '',
+          action: `${ref} (${title}) created and submitted for review`,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           workingNotes: [...eng.workingNotes, newNote],
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:20',
-              actor: currentUser.name,
-              action: `${ref} (${title}) created and submitted for review`,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -324,21 +369,26 @@ export default function App() {
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const fnd = eng.findings.find((f) => f.id === findingId);
-        return {
-          ...eng,
-          findings: eng.findings.map((f) =>
-            f.id === findingId ? { ...f, status: 'Validated & Closed' } : f
-          ),
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:25',
-              actor: currentUser.name,
-              action: `Finding ${fnd?.ref || ''} evidence validated & closed`,
-            },
-            ...eng.activityLog,
-          ],
+        const updatedFindings = eng.findings.map((f) =>
+          f.id === findingId ? { ...f, status: 'Validated & Closed' as const } : f
+        );
+        const updatedFinding = updatedFindings.find((f) => f.id === findingId);
+        if (updatedFinding) upsertFinding(engagementId, updatedFinding);
+
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:25',
+          actor: currentUser?.name ?? '',
+          action: `Finding ${fnd?.ref || ''} evidence validated & closed`,
         };
+        const updated: AuditEngagement = {
+          ...eng,
+          findings: updatedFindings,
+          activityLog: [logEntry, ...eng.activityLog],
+        };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
     setActiveLifecycleStage(6);
@@ -348,20 +398,22 @@ export default function App() {
     setEngagements((prev) =>
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
-        return {
+        upsertFinding(engagementId, finding);
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:28',
+          actor: currentUser?.name ?? '',
+          action: `Finding ${finding.ref} (${finding.title}) drafted`,
+          detail: `Severity: ${finding.severity} · Linked to ${finding.linkedNoteRef}`,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           findings: [...eng.findings, finding],
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:28',
-              actor: currentUser.name,
-              action: `Finding ${finding.ref} (${finding.title}) drafted`,
-              detail: `Severity: ${finding.severity} · Linked to ${finding.linkedNoteRef}`,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -377,29 +429,34 @@ export default function App() {
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const target = eng.findings.find((f) => f.id === findingId);
-        return {
-          ...eng,
-          findings: eng.findings.map((f) =>
-            f.id === findingId
-              ? {
-                  ...f,
-                  status: newStatus,
-                  owner: owner || f.owner,
-                  targetDate: targetDate || f.targetDate,
-                }
-              : f
-          ),
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:30',
-              actor: currentUser.name,
-              action: `${target?.ref || 'Finding'} action plan updated (${newStatus})`,
-              detail: owner && targetDate ? `Owner: ${owner} · Due ${targetDate}` : undefined,
-            },
-            ...eng.activityLog,
-          ],
+        const updatedFindings = eng.findings.map((f) =>
+          f.id === findingId
+            ? {
+                ...f,
+                status: newStatus,
+                owner: owner || f.owner,
+                targetDate: targetDate || f.targetDate,
+              }
+            : f
+        );
+        const updatedFinding = updatedFindings.find((f) => f.id === findingId);
+        if (updatedFinding) upsertFinding(engagementId, updatedFinding);
+
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:30',
+          actor: currentUser?.name ?? '',
+          action: `${target?.ref || 'Finding'} action plan updated (${newStatus})`,
+          detail: owner && targetDate ? `Owner: ${owner} · Due ${targetDate}` : undefined,
         };
+        const updated: AuditEngagement = {
+          ...eng,
+          findings: updatedFindings,
+          activityLog: [logEntry, ...eng.activityLog],
+        };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -408,20 +465,22 @@ export default function App() {
     setEngagements((prev) =>
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
-        return {
+        insertFile(engagementId, file);
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: file.uploadedAt,
+          actor: currentUser?.name ?? '',
+          action: 'File uploaded',
+          detail: `${file.folder} / ${file.name} (${file.size})`,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           files: [file, ...eng.files],
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: file.uploadedAt,
-              actor: currentUser.name,
-              action: 'File uploaded',
-              detail: `${file.folder} / ${file.name} (${file.size})`,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -434,20 +493,21 @@ export default function App() {
     setEngagements((prev) =>
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
-        return {
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: '4 Oct 2026, 14:32',
+          actor: currentUser?.name ?? '',
+          action: `${eng.reportRef} Report status updated to ${newStatus}`,
+        };
+        const updated: AuditEngagement = {
           ...eng,
           reportStatus: newStatus,
           executiveSummary,
-          activityLog: [
-            {
-              id: `act-${Date.now()}`,
-              timestamp: '4 Oct 2026, 14:32',
-              actor: currentUser.name,
-              action: `${eng.reportRef} Report status updated to ${newStatus}`,
-            },
-            ...eng.activityLog,
-          ],
+          activityLog: [logEntry, ...eng.activityLog],
         };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
       })
     );
   };
@@ -455,11 +515,12 @@ export default function App() {
   const handleAutoAssignLeads = () => {
     const leads = ['A. Villanueva', 'P. Mendoza', 'J. Reyes', 'K. Lim', 'B. Tolentino'];
     setEngagements((prev) =>
-      prev.map((eng, idx) =>
-        eng.status === 'Planned'
-          ? { ...eng, lead: leads[idx % leads.length] }
-          : eng
-      )
+      prev.map((eng, idx) => {
+        if (eng.status !== 'Planned') return eng;
+        const updated = { ...eng, lead: leads[idx % leads.length] };
+        upsertEngagement(updated);
+        return updated;
+      })
     );
   };
 
@@ -500,12 +561,17 @@ export default function App() {
       files: [],
       activityLog: [],
     };
+    upsertEngagement(drafted);
     setEngagements((prev) => [...prev, drafted]);
+  };
+
+  const handleSaveFrequencies = (freq: { critical: number; high: number; medium: number; low: number }) => {
+    setFrequenciesState(freq);
+    saveFrequencies(freq);
   };
 
   // ── Auth gates ────────────────────────────────────────────────────────────
 
-  // Waiting for seedDefaultAdmin to complete
   if (!authReady) {
     return (
       <div className="min-h-screen bg-[#E8E2F4] flex items-center justify-center">
@@ -514,12 +580,10 @@ export default function App() {
     );
   }
 
-  // Not logged in → show login page
   if (!authSession) {
     return <LoginPage onLoginSuccess={handleLoginSuccess} />;
   }
 
-  // PM-3: Logged in but must change password first
   if (authSession.requiresPasswordChange) {
     return (
       <ForcePasswordChange
@@ -527,6 +591,14 @@ export default function App() {
         onChanged={handlePasswordChanged}
         onLogout={handleLogout}
       />
+    );
+  }
+
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen bg-[#E8E2F4] flex items-center justify-center">
+        <div className="text-slate-500 text-sm animate-pulse">Loading data…</div>
+      </div>
     );
   }
 
@@ -551,7 +623,7 @@ export default function App() {
             : activeLifecycleStage - 1
         }
         onSelectLifecycleStage={handleSelectLifecycleStage}
-        currentUser={currentUser}
+        currentUser={currentUser ?? userProfiles[0]}
         onChangeUser={setCurrentUser}
         accessActive={accessActive}
         onToggleAccess={() => setAccessActive((prev) => !prev)}
@@ -586,9 +658,10 @@ export default function App() {
             engagements={engagements}
             universe={universe}
             onSelectEngagement={handleSelectEngagement}
-            onAddEngagement={(newEng) =>
-              setEngagements((prev) => [newEng, ...prev])
-            }
+            onAddEngagement={(newEng) => {
+              upsertEngagement(newEng);
+              setEngagements((prev) => [newEng, ...prev]);
+            }}
             onAutoAssignLeads={handleAutoAssignLeads}
             onDraftFromUniverse={handleDraftFromUniverse}
           />
@@ -608,7 +681,7 @@ export default function App() {
             onSelectEngagement={handleSelectEngagement}
             activeSubTab={activeSubTab}
             onSelectSubTab={handleSelectSubTab}
-            currentUser={currentUser}
+            currentUser={currentUser ?? userProfiles[0]}
             onChangeUser={setCurrentUser}
             accessActive={accessActive}
             onApproveWorkingNote={handleApproveWorkingNote}
@@ -633,7 +706,7 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsView
             frequencies={frequencies}
-            onSaveFrequencies={setFrequencies}
+            onSaveFrequencies={handleSaveFrequencies}
           />
         )}
 
@@ -642,7 +715,7 @@ export default function App() {
           activeTab === 'access') && (
           <MasterDataSetupAccessView
             tab={activeTab}
-            currentUser={currentUser}
+            currentUser={currentUser ?? userProfiles[0]}
             onChangeUser={setCurrentUser}
             accessActive={accessActive}
             onToggleAccess={() => setAccessActive((prev) => !prev)}
