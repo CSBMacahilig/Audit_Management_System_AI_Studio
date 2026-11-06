@@ -27,169 +27,105 @@ import {
   AccessListRow,
 } from '../utils/security';
 
-// 1. OVERVIEW VIEW (Exact match to Audit-Management-System.png)
+// 1. OVERVIEW VIEW
 export const OverviewView: React.FC<{
   engagements: AuditEngagement[];
+  universe?: UniverseEntity[];
+  issues?: IssueRegisterItem[];
   onSelectLifecycleStage: (stageId: LifecycleStageId) => void;
   onOpenEngagement: (eng: AuditEngagement) => void;
   onSelectTab: (tab: MainTabId) => void;
-}> = ({ onOpenEngagement, onSelectTab, onSelectLifecycleStage, engagements }) => {
-  // Exact 5 matrix rows for L=5 down to L=1 and I=1 to I=5 matching Audit-Management-System.png
-  // Total 160 entities: 30 Critical, 82 High, 45 Medium, 3 Low
+}> = ({ onOpenEngagement, onSelectTab, onSelectLifecycleStage, engagements, universe = [], issues = [] }) => {
+  const getRiskLevel = (score: number): RiskLevel => {
+    if (score >= 20) return 'Critical';
+    if (score >= 10) return 'High';
+    if (score >= 5) return 'Medium';
+    return 'Low';
+  };
+
+  // Dynamic heat map cells
   const heatMapCells: {
     l: number;
     i: number;
     count: number;
     level: RiskLevel;
-  }[][] = [
-    [
-      { l: 5, i: 1, count: 0, level: 'Medium' },
-      { l: 5, i: 2, count: 1, level: 'High' },
-      { l: 5, i: 3, count: 2, level: 'High' },
-      { l: 5, i: 4, count: 9, level: 'Critical' },
-      { l: 5, i: 5, count: 9, level: 'Critical' },
-    ],
-    [
-      { l: 4, i: 1, count: 0, level: 'Low' },
-      { l: 4, i: 2, count: 5, level: 'Medium' },
-      { l: 4, i: 3, count: 23, level: 'High' },
-      { l: 4, i: 4, count: 53, level: 'High' },
-      { l: 4, i: 5, count: 12, level: 'Critical' },
-    ],
-    [
-      { l: 3, i: 1, count: 0, level: 'Low' },
-      { l: 3, i: 2, count: 8, level: 'Medium' },
-      { l: 3, i: 3, count: 32, level: 'Medium' },
-      { l: 3, i: 4, count: 3, level: 'High' },
-      { l: 3, i: 5, count: 0, level: 'High' },
-    ],
-    [
-      { l: 2, i: 1, count: 0, level: 'Low' },
-      { l: 2, i: 2, count: 3, level: 'Low' },
-      { l: 2, i: 3, count: 0, level: 'Medium' },
-      { l: 2, i: 4, count: 0, level: 'Medium' },
-      { l: 2, i: 5, count: 0, level: 'High' },
-    ],
-    [
-      { l: 1, i: 1, count: 0, level: 'Low' },
-      { l: 1, i: 2, count: 0, level: 'Low' },
-      { l: 1, i: 3, count: 0, level: 'Low' },
-      { l: 1, i: 4, count: 0, level: 'Low' },
-      { l: 1, i: 5, count: 0, level: 'Medium' },
-    ],
-  ];
+  }[][] = [5, 4, 3, 2, 1].map((l) =>
+    [1, 2, 3, 4, 5].map((i) => {
+      const count = universe.filter((u) => u.likelihood === l && u.impact === i).length;
+      return {
+        l,
+        i,
+        count,
+        level: getRiskLevel(l * i),
+      };
+    })
+  );
 
   const getCellStyle = (level: RiskLevel, count: number) => {
     switch (level) {
       case 'Critical':
         return count > 0
           ? 'bg-[#B93829] text-white'
-          : 'bg-[#E39B93] text-white/90';
+          : 'bg-[#F9ECEB] text-slate-400 border border-[#B93829]/20';
       case 'High':
         return count > 0
           ? 'bg-[#D97724] text-white'
-          : 'bg-[#EAB586] text-white/90';
+          : 'bg-[#FDF3EA] text-slate-400 border border-[#D97724]/20';
       case 'Medium':
         return count > 0
           ? 'bg-[#C99E2C] text-white'
-          : 'bg-[#E3CC8D] text-white/90';
+          : 'bg-[#FAF6EC] text-slate-400 border border-[#C99E2C]/20';
       case 'Low':
         return count > 0
           ? 'bg-[#519E66] text-white'
-          : 'bg-[#9DCAA9] text-white/90';
+          : 'bg-[#EFF7F2] text-slate-400 border border-[#519E66]/20';
     }
   };
 
-  const reauditWatchlist = [
-    {
-      name: 'APDS deduction file generation & transmission',
-      risk: 'Critical' as RiskLevel,
-      dueText: 'Due 20 May 2026 (140d overdue)',
-    },
-    {
-      name: 'Mobile Banking App – application security',
-      risk: 'Critical' as RiskLevel,
-      dueText: 'Due 15 Jun 2026 (114d overdue)',
-    },
-    {
-      name: 'Treasury – liquidity & BSP reserve management',
-      risk: 'Critical' as RiskLevel,
-      dueText: 'Due 18 Aug 2026 (50d overdue)',
-    },
-    {
-      name: 'APDS remittance reconciliation',
-      risk: 'Critical' as RiskLevel,
-      dueText: 'Due 13 Sept 2026 (24d overdue)',
-    },
-    {
-      name: 'Loan release via cash card',
-      risk: 'High' as RiskLevel,
-      dueText: 'Due 18 Sept 2026 (19d overdue)',
-    },
-  ];
+  const criticalUniverseCount = universe.filter((u) => u.riskLevel === 'Critical').length;
+  const highUniverseCount = universe.filter((u) => u.riskLevel === 'High').length;
 
-  const overdueRemediation = [
-    {
-      ref: 'ISS-2026-001',
-      title: 'Long-outstanding APDS variance items (>90 days)',
-      severity: 'High' as RiskLevel,
-      meta: 'R. Bautista · 8d overdue',
-    },
-    {
-      ref: 'ISS-2026-002',
-      title: 'Manual adjustments without dual sign-off',
-      severity: 'Medium' as RiskLevel,
-      meta: 'R. Bautista · 8d overdue',
-    },
-    {
-      ref: 'ISS-2026-003',
-      title: '28 loans exceeded 50% NTHP cap',
-      severity: 'High' as RiskLevel,
-      meta: 'V. Pascual · 8d overdue',
-    },
-  ];
+  const closedEngagementsCount = engagements.filter((e) => e.status === 'Closed').length;
+  const activeEngagementsCount = engagements.filter(
+    (e) => e.status === 'In progress' || e.status === 'Reporting'
+  ).length;
+  const plannedEngagementsCount = engagements.filter(
+    (e) => e.status === 'Planned' || e.status === 'Scheduled'
+  ).length;
+  const planProgressPct =
+    engagements.length > 0 ? Math.round((closedEngagementsCount / engagements.length) * 100) : 0;
 
-  const activeAndUpcoming = [
-    {
-      ref: 'AUD-2026-006',
-      title: 'Mobile Banking Application Security Review',
-      meta: 'P. Mendoza · 14 Sept – 23 Oct',
-      status: 'Reporting' as const,
-      engId: 'aud-2026-006',
-    },
-    {
-      ref: 'AUD-2026-005',
-      title: 'Cash Card Loan Release Audit',
-      meta: 'K. Lim · 1 Oct – 9 Nov',
-      status: 'Reporting' as const,
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-007',
-      title: 'Stopped Deductions & Unremitted Accounts Audit',
-      meta: 'A. Villanueva · 12 Oct – 20 Nov',
-      status: 'Scheduled' as const,
-      engId: 'aud-2026-007',
-    },
-    {
-      ref: 'AUD-2026-094',
-      title: 'Core Banking – privileged access management Audit-Test',
-      meta: 'N. Lopez · 27 Oct – 4 Dec',
-      status: 'In progress' as const,
-      engId: 'aud-2026-094',
-    },
-    {
-      ref: 'AUD-2027-004',
-      title: 'APDS system integration',
-      meta: 'B. Tolentino · 16 Feb – 27 Mar',
-      status: 'In progress' as const,
-      engId: 'aud-2027-004',
-    },
-  ];
+  const openIssues = issues.filter((i) => i.status !== 'Closed');
+  const overdueIssues = issues.filter((i) => i.isOverdue && i.status !== 'Closed');
+  const dueSoonIssues = issues.filter((i) => i.isDueSoon && i.status !== 'Closed');
+
+  const reauditWatchlist = universe
+    .filter((u) => u.nextDue && (u.nextDue.toLowerCase().includes('overdue') || u.riskLevel === 'Critical'))
+    .slice(0, 5)
+    .map((u) => ({
+      name: u.name,
+      risk: u.riskLevel,
+      dueText: `Due: ${u.nextDue || 'Pending'}`,
+    }));
+
+  const overdueReauditCount = universe.filter(
+    (u) => u.nextDue && u.nextDue.toLowerCase().includes('overdue')
+  ).length;
+
+  const overdueRemediation = overdueIssues.slice(0, 5).map((iss) => ({
+    ref: iss.ref,
+    title: iss.title,
+    severity: iss.severity,
+    meta: `${iss.owner} · Overdue`,
+  }));
+
+  const activeAndUpcoming = engagements
+    .filter((e) => e.status === 'In progress' || e.status === 'Reporting' || e.status === 'Scheduled')
+    .slice(0, 5);
 
   return (
     <div className="space-y-4">
-      {/* Top 4 KPI Cards matching Audit-Management-System (1).png */}
+      {/* Top 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: AUDIT UNIVERSE */}
         <div
@@ -203,21 +139,21 @@ export const OverviewView: React.FC<{
             AUDIT UNIVERSE
           </div>
           <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            160
+            {universe.length}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 mt-2.5 tabular-nums">
             <span className="px-1.5 py-0.5 rounded bg-[#B93829] text-white font-bold text-[11px]">
-              30
+              {criticalUniverseCount}
             </span>
             <span>Critical</span>
             <span className="px-1.5 py-0.5 rounded bg-[#D97724] text-white font-bold text-[11px] ml-1">
-              82
+              {highUniverseCount}
             </span>
             <span>High</span>
           </div>
         </div>
 
-        {/* Card 2: 2026 PLAN PROGRESS */}
+        {/* Card 2: PLAN PROGRESS */}
         <div
           onClick={() => {
             onSelectLifecycleStage(1);
@@ -226,16 +162,16 @@ export const OverviewView: React.FC<{
           className="bg-white rounded-lg border border-slate-200/90 p-5 shadow-2xs cursor-pointer hover:border-[#542D84]/50 transition-colors"
         >
           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            2026 PLAN PROGRESS
+            ANNUAL PLAN PROGRESS
           </div>
           <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            4/93
+            {closedEngagementsCount}/{engagements.length}
           </div>
           <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden mt-3">
-            <div className="h-full bg-[#492785] rounded-full" style={{ width: '5%' }} />
+            <div className="h-full bg-[#492785] rounded-full" style={{ width: `${planProgressPct}%` }} />
           </div>
           <div className="text-xs text-slate-500 mt-2 tabular-nums">
-            4 active · 85 planned
+            {activeEngagementsCount} active · {plannedEngagementsCount} planned
           </div>
         </div>
 
@@ -251,10 +187,10 @@ export const OverviewView: React.FC<{
             OPEN ISSUES
           </div>
           <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            9
+            {openIssues.length}
           </div>
           <div className="text-xs text-slate-600 mt-2.5 tabular-nums">
-            <span className="text-[#B93829] font-semibold">3 overdue</span> · 1 due in 30d
+            <span className="text-[#B93829] font-semibold">{overdueIssues.length} overdue</span> · {dueSoonIssues.length} due in 30d
           </div>
         </div>
 
@@ -270,10 +206,10 @@ export const OverviewView: React.FC<{
             RE-AUDIT DUE / OVERDUE
           </div>
           <div className="text-[30px] font-bold text-[#B93829] font-mono-tabular leading-tight mt-1">
-            5
+            {overdueReauditCount}
           </div>
           <div className="text-xs text-slate-500 mt-2.5 tabular-nums">
-            + 0 due within 60 days
+            {reauditWatchlist.length} watchlist entities
           </div>
         </div>
       </div>
@@ -286,7 +222,7 @@ export const OverviewView: React.FC<{
             Inherent risk heat map
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Likelihood (vertical) × Impact (horizontal) across the audit universe.
+            Likelihood (vertical) × Impact (horizontal) across registered auditable entities.
           </p>
 
           <div className="mt-4">
@@ -340,38 +276,44 @@ export const OverviewView: React.FC<{
             Entities whose next cyclical audit is overdue or due within 60 days.
           </p>
 
-          <div className="mt-4 divide-y divide-slate-200/80">
-            {reauditWatchlist.map((item, idx) => (
-              <div
-                key={idx}
-                onClick={() => {
-                  onSelectLifecycleStage(7);
-                  onSelectTab('universe');
-                }}
-                className="py-2.5 first:pt-1 last:pb-0 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/70 px-1 rounded"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold text-white shrink-0 ${
-                      item.risk === 'Critical' ? 'bg-[#B93829]' : 'bg-[#D97724]'
-                    }`}
-                  >
-                    {item.risk}
-                  </span>
-                  <span className="text-[13px] font-medium text-slate-900 truncate">
-                    {item.name}
+          {reauditWatchlist.length > 0 ? (
+            <div className="mt-4 divide-y divide-slate-200/80">
+              {reauditWatchlist.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => {
+                    onSelectLifecycleStage(7);
+                    onSelectTab('universe');
+                  }}
+                  className="py-2.5 first:pt-1 last:pb-0 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/70 px-1 rounded"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold text-white shrink-0 ${
+                        item.risk === 'Critical' ? 'bg-[#B93829]' : 'bg-[#D97724]'
+                      }`}
+                    >
+                      {item.risk}
+                    </span>
+                    <span className="text-[13px] font-medium text-slate-900 truncate">
+                      {item.name}
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono-tabular font-medium text-[#B93829] whitespace-nowrap shrink-0">
+                    {item.dueText}
                   </span>
                 </div>
-                <span className="text-xs font-mono-tabular font-medium text-[#B93829] whitespace-nowrap shrink-0">
-                  {item.dueText}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-8 py-6 text-center text-xs text-slate-500 bg-slate-50/70 rounded-md border border-dashed border-slate-200">
+              No cyclical re-audits are currently due or overdue. Auditable entities are on schedule.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bottom 2-Column Row matching Audit-Management-System.png */}
+      {/* Bottom 2-Column Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left Bottom Card: Overdue remediation items */}
         <div className="bg-white rounded-lg border border-slate-200/90 p-6 shadow-2xs">
@@ -382,38 +324,44 @@ export const OverviewView: React.FC<{
             Issues past their current due date requiring escalation.
           </p>
 
-          <div className="mt-4 divide-y divide-slate-200/80">
-            {overdueRemediation.map((iss) => (
-              <div
-                key={iss.ref}
-                onClick={() => {
-                  onSelectLifecycleStage(5);
-                  onSelectTab('issues');
-                }}
-                className="py-3 first:pt-1 last:pb-0 flex items-center justify-between gap-3 hover:bg-slate-50/70 px-1 rounded cursor-pointer"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold text-white shrink-0 ${
-                      iss.severity === 'Critical'
-                        ? 'bg-[#B93829]'
-                        : iss.severity === 'High'
-                        ? 'bg-[#D97724]'
-                        : 'bg-[#C99E2C]'
-                    }`}
-                  >
-                    {iss.severity}
-                  </span>
-                  <span className="text-[13px] font-medium text-slate-900 truncate">
-                    <span className="font-mono-tabular">{iss.ref}</span> {iss.title}
+          {overdueRemediation.length > 0 ? (
+            <div className="mt-4 divide-y divide-slate-200/80">
+              {overdueRemediation.map((iss) => (
+                <div
+                  key={iss.ref}
+                  onClick={() => {
+                    onSelectLifecycleStage(5);
+                    onSelectTab('issues');
+                  }}
+                  className="py-3 first:pt-1 last:pb-0 flex items-center justify-between gap-3 hover:bg-slate-50/70 px-1 rounded cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold text-white shrink-0 ${
+                        iss.severity === 'Critical'
+                          ? 'bg-[#B93829]'
+                          : iss.severity === 'High'
+                          ? 'bg-[#D97724]'
+                          : 'bg-[#C99E2C]'
+                      }`}
+                    >
+                      {iss.severity}
+                    </span>
+                    <span className="text-[13px] font-medium text-slate-900 truncate">
+                      <span className="font-mono-tabular">{iss.ref}</span> {iss.title}
+                    </span>
+                  </div>
+                  <span className="text-xs font-mono-tabular font-medium text-[#B93829] whitespace-nowrap shrink-0">
+                    {iss.meta}
                   </span>
                 </div>
-                <span className="text-xs font-mono-tabular font-medium text-[#B93829] whitespace-nowrap shrink-0">
-                  {iss.meta}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-8 py-6 text-center text-xs text-slate-500 bg-slate-50/70 rounded-md border border-dashed border-slate-200">
+              No overdue remediation items. All audit findings are resolved or within remediation target dates.
+            </div>
+          )}
         </div>
 
         {/* Right Bottom Card: Active & upcoming engagements */}
@@ -425,44 +373,48 @@ export const OverviewView: React.FC<{
             Audits currently in fieldwork, reporting, or scheduled next.
           </p>
 
-          <div className="mt-4 divide-y divide-slate-200/80">
-            {activeAndUpcoming.map((item) => {
-              const matched =
-                engagements.find((e) => e.id === item.engId) || engagements[0];
-              return (
-                <div
-                  key={item.ref}
-                  onClick={() => onOpenEngagement(matched)}
-                  className="py-3 first:pt-1 last:pb-0 flex items-center justify-between gap-3 hover:bg-slate-50/70 px-1 rounded cursor-pointer"
-                >
-                  <div>
-                    <div className="text-[13.5px] font-bold text-slate-900">
-                      <span className="font-mono-tabular">{item.ref}</span> {item.title}
+          {activeAndUpcoming.length > 0 ? (
+            <div className="mt-4 divide-y divide-slate-200/80">
+              {activeAndUpcoming.map((item) => {
+                return (
+                  <div
+                    key={item.ref}
+                    onClick={() => onOpenEngagement(item)}
+                    className="py-3 first:pt-1 last:pb-0 flex items-center justify-between gap-3 hover:bg-slate-50/70 px-1 rounded cursor-pointer"
+                  >
+                    <div>
+                      <div className="text-[13.5px] font-bold text-slate-900">
+                        <span className="font-mono-tabular">{item.ref}</span> {item.title}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">{item.lead || '—'} · {item.startDate} – {item.endDate}</div>
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{item.meta}</div>
+                    <div className="shrink-0">
+                      {item.status === 'Reporting' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FBE7D3] text-[#B8500B]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D97724]" />
+                          Reporting
+                        </span>
+                      ) : item.status === 'In progress' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E4DDF8] text-[#492785]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#492785]" />
+                          In progress
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#DCE8FB] text-[#1D4ED8]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
+                          Scheduled
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="shrink-0">
-                    {item.status === 'Reporting' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FBE7D3] text-[#B8500B]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#D97724]" />
-                        Reporting
-                      </span>
-                    ) : item.status === 'In progress' ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E4DDF8] text-[#492785]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#492785]" />
-                        In progress
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#DCE8FB] text-[#1D4ED8]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#1D4ED8]" />
-                        Scheduled
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-8 py-6 text-center text-xs text-slate-500 bg-slate-50/70 rounded-md border border-dashed border-slate-200">
+              No active or scheduled engagements. Use &ldquo;Annual audit plan&rdquo; to schedule new audits.
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -715,6 +667,35 @@ export const AuditUniverseView: React.FC<{
                 </tr>
               );
             })}
+
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={9} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    {records.length === 0 ? (
+                      <>
+                        <p className="text-sm font-semibold text-slate-800">No auditable entities found</p>
+                        <p className="text-xs text-slate-500 mt-1 mb-4">The audit universe is currently clean and ready for testing. Click &ldquo;Add entity&rdquo; to register your first auditable department, process, or system.</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddModal(true)}
+                          className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                        >
+                          + Add Auditable Entity
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-500">No auditable entities match your current filter criteria.</p>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -855,348 +836,48 @@ export const TimelineView: React.FC<{
     'Dec',
   ];
 
-  // Gantt rows matching Audit-Management-System (9).png
-  const ganttRows: {
-    ref: string;
-    title: string;
-    lead: string;
-    risk: RiskLevel;
-    startMonthIdx: number;
-    spanMonths: number;
-    barColor: string;
-    engId: string;
-  }[] = [
-    {
-      ref: 'AUD-2026-001',
-      title: 'APDS Remittance Reconciliation Audit',
-      lead: 'A. Villanueva',
-      risk: 'Critical',
-      startMonthIdx: 1.0, // Feb
-      spanMonths: 1.4,
-      barColor: 'bg-[#1D7A4C]',
-      engId: 'aud-2026-001',
-    },
-    {
-      ref: 'AUD-2026-002',
-      title: 'Core Banking Privileged Access Review',
-      lead: 'J. Reyes',
-      risk: 'Critical',
-      startMonthIdx: 2.4, // Mid Mar
-      spanMonths: 1.4,
-      barColor: 'bg-[#1D7A4C]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-003',
-      title: 'Teacher Salary Loan Origination Audit',
-      lead: 'A. Villanueva',
-      risk: 'Critical',
-      startMonthIdx: 3.8, // Late Apr
-      spanMonths: 1.4,
-      barColor: 'bg-[#1D7A4C]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-004',
-      title: 'Cebu Branch Operations Audit',
-      lead: 'L. Garcia',
-      risk: 'Medium',
-      startMonthIdx: 5.2, // Jun
-      spanMonths: 0.7,
-      barColor: 'bg-[#1D7A4C]',
-      engId: 'aud-2026-004',
-    },
-    {
-      ref: 'AUD-2026-006',
-      title: 'Mobile Banking Application Security Review',
-      lead: 'P. Mendoza',
-      risk: 'Critical',
-      startMonthIdx: 8.4, // Mid Sept
-      spanMonths: 1.4,
-      barColor: 'bg-[#D97724]',
-      engId: 'aud-2026-006',
-    },
-    {
-      ref: 'AUD-2026-005',
-      title: 'Cash Card Loan Release Audit',
-      lead: 'K. Lim',
-      risk: 'High',
-      startMonthIdx: 9.0, // Oct
-      spanMonths: 1.3,
-      barColor: 'bg-[#D97724]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-086',
-      title: 'Operational risk & loss event reporting Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.1,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-072',
-      title: 'Iloilo Branch Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.3,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-034',
-      title: 'Mobile Banking – authentication & OTP controls Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.3,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-006',
-    },
-    {
-      ref: 'AUD-2026-078',
-      title: 'Cash-in-Transit Service Provider Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.3,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-007',
-      title: 'Stopped Deductions & Unremitted Accounts Audit',
-      lead: 'A. Villanueva',
-      risk: 'Critical',
-      startMonthIdx: 9.3,
-      spanMonths: 1.3,
-      barColor: 'bg-[#3B6998]',
-      engId: 'aud-2026-007',
-    },
-    {
-      ref: 'AUD-2026-055',
-      title: 'Walk-in teacher loan application intake Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.3,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-021',
-      title: 'Loan loss provisioning (ECL) Audit',
-      lead: '—',
-      risk: 'Critical',
-      startMonthIdx: 9.6,
-      spanMonths: 1.3,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-001',
-    },
-    {
-      ref: 'AUD-2026-057',
-      title: 'Calamity loan restructuring for teachers Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-067',
-      title: 'Business continuity management Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-091',
-      title: 'Whistleblowing & ethics hotline Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.6,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-004',
-    },
-    {
-      ref: 'AUD-2026-089',
-      title: 'Co-maker & guarantor validation Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.6,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-058',
-      title: 'Retiree & pensioner teacher loans Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-073',
-      title: 'Cagayan de Oro Branch Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.6,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-004',
-    },
-    {
-      ref: 'AUD-2026-079',
-      title: 'Recovery on written-off accounts Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.6,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-001',
-    },
-    {
-      ref: 'AUD-2026-066',
-      title: 'Credit data submission to CIC Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-060',
-      title: 'Release to authorized representatives (SPA) Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-053',
-      title: 'Tacloban Branch Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-004',
-    },
-    {
-      ref: 'AUD-2026-040',
-      title: 'Core Banking Software Vendor – remote support Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-025',
-      title: 'Accredited School Marketing Agents Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-010',
-      title: 'Cash Card Platform – admin & privileged access Audit',
-      lead: '—',
-      risk: 'Critical',
-      startMonthIdx: 9.6,
-      spanMonths: 1.3,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-005',
-    },
-    {
-      ref: 'AUD-2026-043',
-      title: 'Outsourcing & third-party risk management Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-012',
-      title: 'APDS Deduction Interface – file transfer security Audit',
-      lead: '—',
-      risk: 'Critical',
-      startMonthIdx: 9.6,
-      spanMonths: 1.3,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-001',
-    },
-    {
-      ref: 'AUD-2026-085',
-      title: 'Data Warehouse & MIS – report integrity Audit',
-      lead: '—',
-      risk: 'Medium',
-      startMonthIdx: 9.6,
-      spanMonths: 0.9,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-031',
-      title: 'Third-party Collection Agencies Audit',
-      lead: '—',
-      risk: 'High',
-      startMonthIdx: 9.6,
-      spanMonths: 1.1,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-003',
-    },
-    {
-      ref: 'AUD-2026-014',
-      title: 'Core Banking – vulnerability & patch management Audit',
-      lead: '—',
-      risk: 'Critical',
-      startMonthIdx: 9.6,
-      spanMonths: 1.3,
-      barColor: 'bg-[#6C737A]',
-      engId: 'aud-2026-002',
-    },
-    {
-      ref: 'AUD-2026-094',
-      title: 'Core Banking – privileged access management Audit-Test',
-      lead: 'N. Lopez',
-      risk: 'Critical',
-      startMonthIdx: 9.8,
-      spanMonths: 1.3,
-      barColor: 'bg-[#492785]',
-      engId: 'aud-2026-094',
-    },
-  ];
+  const monthMap: Record<string, number> = {
+    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+    Jul: 6, Aug: 7, Sept: 8, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+  };
+
+  const ganttRows = engagements.map((eng) => {
+    let startMonthIdx = 0;
+    const parts = eng.startDate ? eng.startDate.split(" ") : [];
+    if (parts.length >= 2) {
+      const mStr = parts[1];
+      startMonthIdx = monthMap[mStr] !== undefined ? monthMap[mStr] : 0;
+    }
+    const spanMonths = Math.max(0.6, (eng.durationDays || 26) / 30);
+    const barColor =
+      eng.status === "Closed"
+        ? "bg-[#1D7A4C]"
+        : eng.status === "Reporting" || eng.status === "In progress"
+        ? "bg-[#D97724]"
+        : "bg-[#6C737A]";
+
+    return {
+      ref: eng.ref,
+      title: eng.title,
+      lead: eng.lead || "—",
+      risk: eng.riskLevel,
+      startMonthIdx,
+      spanMonths,
+      barColor,
+      engId: eng.id,
+      engagement: eng,
+    };
+  });
 
   return (
     <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-[19px] font-bold text-slate-900 tracking-tight">
-            Audit schedule timeline ({selectedYear})
+            Audit engagement timeline {selectedYear}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Month-by-month Gantt view of planned, ongoing and completed engagements.
+            Gantt schedule of active, reporting, and planned engagements across 12 months.
           </p>
         </div>
 
@@ -1204,27 +885,28 @@ export const TimelineView: React.FC<{
           aria-label="Select timeline year"
           value={selectedYear}
           onChange={(e) => setSelectedYear(e.target.value)}
-          className="px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800"
+          className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
         >
           <option value="2026">2026</option>
           <option value="2027">2027</option>
+          <option value="2025">2025</option>
         </select>
       </div>
 
-      <div className="mt-5 overflow-x-auto">
-        <div className="min-w-[880px]">
-          {/* Header Row */}
-          <div className="grid grid-cols-12 border-b border-slate-200 pb-2 text-xs text-slate-500">
-            <div className="col-span-4 pr-4 font-medium">Audit</div>
-            <div className="col-span-8 grid grid-cols-12 text-center font-medium">
-              {months.map((m) => (
-                <div key={m}>{m}</div>
-              ))}
-            </div>
+      {/* Month Columns Header */}
+      <div className="mt-6 border-b border-slate-200 pb-2">
+        <div className="grid grid-cols-12 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <div className="col-span-4 pr-4">ENGAGEMENT</div>
+          <div className="col-span-8 grid grid-cols-12 text-center font-mono-tabular">
+            {months.map((m) => (
+              <div key={m}>{m}</div>
+            ))}
           </div>
+        </div>
+      </div>
 
-          {/* Gantt Rows */}
-          <div className="divide-y divide-slate-200/80">
+      {/* Gantt Rows */}
+      <div className="divide-y divide-slate-200/80">
             {ganttRows.map((row) => {
               const matchedEng =
                 engagements.find((e) => e.id === row.engId) || engagements[0];
@@ -1281,10 +963,14 @@ export const TimelineView: React.FC<{
                 </div>
               );
             })}
+
+            {ganttRows.length === 0 && (
+              <div className="py-12 text-center text-xs text-slate-500">
+                No scheduled engagements in timeline. Plan or launch audits from the Annual Plan tab to visualize the timeline schedule.
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    </div>
   );
 };
 
@@ -1560,6 +1246,16 @@ export const IssuesView: React.FC<{
                   </td>
                 </tr>
               ))}
+
+              {displayed.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-xs text-slate-500">
+                    {issues.length === 0
+                      ? 'No audit issues currently registered. Issues will appear here when findings are raised during fieldwork and reporting.'
+                      : 'No issues match the selected filter.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

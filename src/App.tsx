@@ -4,11 +4,11 @@ import {
   AuditFile,
   AuditFinding,
   EngagementSubTabId,
-  FULL_UNIVERSE_RECORDS,
   IssueRegisterItem,
   LifecycleStageId,
   MainTabId,
   UniverseEntity,
+  UniverseRecord,
   UserProfile,
   WorkingNote,
 } from './data/auditData';
@@ -709,6 +709,8 @@ export default function App() {
         {activeTab === 'overview' && (
           <OverviewView
             engagements={engagements}
+            universe={universe}
+            issues={issues}
             onSelectLifecycleStage={handleSelectLifecycleStage}
             onOpenEngagement={handleSelectEngagement}
             onSelectTab={handleSelectTab}
@@ -718,7 +720,23 @@ export default function App() {
         {activeTab === 'universe' && (
           <AuditUniverseView
             universe={universe}
-            universeRecords={FULL_UNIVERSE_RECORDS}
+            universeRecords={universe.map((u) => ({
+              id: u.id,
+              name: u.name,
+              subtitle: u.division || u.category,
+              type: (u.category as UniverseRecord['type']) || 'Process',
+              owner: u.defaultLead || 'Internal Audit',
+              likelihood: u.likelihood,
+              impact: u.impact,
+              riskScore: u.riskScore,
+              riskLevel: u.riskLevel,
+              cycleMonths: u.cycleMonths,
+              lastAudit: u.lastAudited || '—',
+              nextDue: u.nextDue || '—',
+              nextDueStatus: (u.nextDue && u.nextDue.toLowerCase().includes('overdue')
+                ? 'Overdue'
+                : 'On track') as 'Overdue' | 'Due soon' | 'On track',
+            }))}
             frequencies={frequencies}
             isReauditMode={activeLifecycleStage === 7}
             onAddUniverseEntity={handleAddUniverseEntity}

@@ -188,87 +188,38 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
 
   // 1. If no engagement is selected, render Fieldwork Overview (Working as, My queue, Ongoing audits) matching Audit-Management-System (4).png
   if (!selectedEngagement) {
-    const ongoingCards = [
-      {
-        id: 'aud-2026-006',
-        ref: 'AUD-2026-006',
-        status: 'Reporting' as const,
-        title: 'Mobile Banking Application Security Review',
-        meta: 'IT & Information Security · AIC P. Mendoza',
-        progressType: 'bar' as const,
-        progressPct: 65,
-        dayText: 'Day 17 of 26',
-        notes: 4,
-        findings: 3,
-        inReview: 2,
-        files: 3,
+    const ongoingCards = ongoingAudits.map((e) => {
+      const critCount = e.findings.filter((f) => f.severity === "Critical").length;
+      const highCount = e.findings.filter((f) => f.severity === "High").length;
+      const medCount = e.findings.filter((f) => f.severity === "Medium").length;
+      const inReviewCount = e.workingNotes.filter(
+        (w) => w.status === 'For head review' || w.status === 'For independent review'
+      ).length;
+
+      return {
+        id: e.id,
+        ref: e.ref,
+        status: e.status as "Reporting" | "In progress",
+        title: e.title,
+        meta: `${e.department || e.category} · AIC ${e.lead}`,
+        progressType: "bar" as const,
+        progressPct: e.fieldworkPct || 0,
+        dayText: `Day ${e.fieldworkDayCurrent || 0} of ${e.fieldworkDayTotal || 26}`,
+        notes: e.workingNotes.length,
+        findings: e.findings.length,
+        inReview: inReviewCount,
+        files: e.files.length,
         severities: [
-          { count: 1, label: 'Critical', color: 'bg-[#B93829]' },
-          { count: 1, label: 'High', color: 'bg-[#D97724]' },
-          { count: 1, label: '—', color: 'bg-[#C99E2C]' },
+          { count: critCount, label: "Critical", color: "bg-[#B93829]" },
+          { count: highCount, label: "High", color: "bg-[#D97724]" },
+          { count: medCount, label: "Medium", color: "bg-[#C99E2C]" },
         ],
-        reportBadge: 'Report: Final – approved by CAE',
-        reportBadgeStyle: 'bg-[#DCEFE2] text-[#1E6339]',
-        reportDotStyle: 'bg-[#1E6339]',
-      },
-      {
-        id: 'aud-2026-005',
-        ref: 'AUD-2026-005',
-        status: 'Reporting' as const,
-        title: 'Cash Card Loan Release Audit',
-        meta: 'Loan Release & Disbursement · AIC K. Lim',
-        progressType: 'bar' as const,
-        progressPct: 16,
-        dayText: 'Day 4 of 26',
-        notes: 1,
-        findings: 2,
-        inReview: 1,
-        files: 4,
-        severities: [
-          { count: 1, label: 'Critical', color: 'bg-[#B93829]' },
-          { count: 1, label: 'High', color: 'bg-[#D97724]' },
-        ],
-        reportBadge: 'Report: Draft',
-        reportBadgeStyle: 'bg-slate-100 text-slate-700 border border-slate-200',
-        reportDotStyle: 'bg-slate-500',
-      },
-      {
-        id: 'aud-2026-094',
-        ref: 'AUD-2026-094',
-        status: 'In progress' as const,
-        title: 'Core Banking – privileged access management Audit-Test',
-        meta: 'IT & Information Security · AIC N. Lopez',
-        progressType: 'starts' as const,
-        progressPct: 0,
-        dayText: 'Starts 27 Oct 2026',
-        notes: 1,
-        findings: 2,
-        inReview: 1,
-        files: 0,
-        severities: [{ count: 2, label: '—', color: 'bg-[#C99E2C]' }],
-        reportBadge: 'Report: Draft',
-        reportBadgeStyle: 'bg-slate-100 text-slate-700 border border-slate-200',
-        reportDotStyle: 'bg-slate-500',
-      },
-      {
-        id: 'aud-2027-004',
-        ref: 'AUD-2027-004',
-        status: 'In progress' as const,
-        title: 'APDS system integration',
-        meta: 'Loan Release & Disbursement · AIC B. Tolentino',
-        progressType: 'starts' as const,
-        progressPct: 0,
-        dayText: 'Starts 16 Feb 2027',
-        notes: 1,
-        findings: 1,
-        inReview: 0,
-        files: 2,
-        severities: [{ count: 1, label: 'High', color: 'bg-[#D97724]' }],
-        reportBadge: 'Report: Final – approved by CAE',
-        reportBadgeStyle: 'bg-[#DCEFE2] text-[#1E6339]',
-        reportDotStyle: 'bg-[#1E6339]',
-      },
-    ];
+        reportBadge: `Report: ${e.reportStatus || "Draft"}`,
+        reportBadgeStyle: e.reportStatus === "Approved by CAE" ? "bg-[#DCEFE2] text-[#1E6339]" : "bg-slate-100 text-slate-700 border border-slate-200",
+        reportDotStyle: e.reportStatus === "Approved by CAE" ? "bg-[#1E6339]" : "bg-slate-500",
+        engagement: e,
+      };
+    });
 
     return (
       <div className="space-y-4">
@@ -393,104 +344,108 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
               </p>
             </div>
             <span className="text-xs text-slate-500 tabular-nums">
-              89 other planned audits not yet ready
+              {engagements.filter((e) => e.status === 'Planned').length} other planned audits
             </span>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {ongoingCards.map((card) => {
-              const matchedEng =
-                engagements.find((e) => e.id === card.id || e.ref === card.ref) ||
-                engagements[0];
+          {ongoingCards.length > 0 ? (
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {ongoingCards.map((card) => {
+                const matchedEng = card.engagement;
 
-              return (
-                <div
-                  key={card.ref}
-                  onClick={() => {
-                    onSelectEngagement(matchedEng);
-                    onSelectSubTab('dashboard');
-                  }}
-                  className="border border-slate-200/90 hover:border-[#542D84]/60 rounded-lg p-4 transition-all cursor-pointer bg-white hover:shadow-xs flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono-tabular text-xs font-medium text-slate-600">
-                        {card.ref}
-                      </span>
-                      {card.status === 'Reporting' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FBE7D3] text-[#B8500B]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#D97724]" />
-                          Reporting
+                return (
+                  <div
+                    key={card.ref}
+                    onClick={() => {
+                      onSelectEngagement(matchedEng);
+                      onSelectSubTab('dashboard');
+                    }}
+                    className="border border-slate-200/90 hover:border-[#542D84]/60 rounded-lg p-4 transition-all cursor-pointer bg-white hover:shadow-xs flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono-tabular text-xs font-medium text-slate-600">
+                          {card.ref}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E4DDF8] text-[#492785]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#492785]" />
-                          In progress
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-[15px] font-bold text-slate-900 mt-2.5 leading-snug">
-                      {card.title}
-                    </h3>
-
-                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                      {card.meta}
-                    </p>
-
-                    <div className="mt-3">
-                      <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#492785] rounded-full"
-                          style={{ width: `${card.progressPct}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1.5 tabular-nums">
-                        {card.dayText}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700 tabular-nums">
-                      <span>
-                        <strong className="font-bold text-slate-900">{card.notes}</strong> notes
-                      </span>
-                      <span>
-                        <strong className="font-bold text-slate-900">{card.findings}</strong> findings
-                      </span>
-                      <span>
-                        <strong className="font-bold text-slate-900">{card.inReview}</strong> in review
-                      </span>
-                      <span>
-                        <strong className="font-bold text-slate-900">{card.files}</strong> files
-                      </span>
-                    </div>
-
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs">
-                      {card.severities.map((sev, idx) => (
-                        <span key={idx} className="inline-flex items-center gap-1">
-                          <span
-                            className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[11px] font-mono-tabular font-bold text-white ${sev.color}`}
-                          >
-                            {sev.count}
+                        {card.status === 'Reporting' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FBE7D3] text-[#B8500B]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#D97724]" />
+                            Reporting
                           </span>
-                          <span className="text-slate-600">{sev.label}</span>
-                        </span>
-                      ))}
-                    </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E4DDF8] text-[#492785]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#492785]" />
+                            In progress
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="mt-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${card.reportBadgeStyle}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${card.reportDotStyle}`} />
-                        {card.reportBadge}
-                      </span>
+                      <h3 className="text-[15px] font-bold text-slate-900 mt-2.5 leading-snug">
+                        {card.title}
+                      </h3>
+
+                      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                        {card.meta}
+                      </p>
+
+                      <div className="mt-3">
+                        <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[#492785] rounded-full"
+                            style={{ width: `${card.progressPct}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1.5 tabular-nums">
+                          {card.dayText}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-700 tabular-nums">
+                        <span>
+                          <strong className="font-bold text-slate-900">{card.notes}</strong> notes
+                        </span>
+                        <span>
+                          <strong className="font-bold text-slate-900">{card.findings}</strong> findings
+                        </span>
+                        <span>
+                          <strong className="font-bold text-slate-900">{card.inReview}</strong> in review
+                        </span>
+                        <span>
+                          <strong className="font-bold text-slate-900">{card.files}</strong> files
+                        </span>
+                      </div>
+
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs">
+                        {card.severities.map((sev, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1">
+                            <span
+                              className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[11px] font-mono-tabular font-bold text-white ${sev.color}`}
+                            >
+                              {sev.count}
+                            </span>
+                            <span className="text-slate-600">{sev.label}</span>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="mt-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${card.reportBadgeStyle}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${card.reportDotStyle}`} />
+                          {card.reportBadge}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-5 py-10 text-center text-xs text-slate-500 bg-slate-50/70 rounded-md border border-dashed border-slate-200">
+              No audits currently in fieldwork or reporting. Plan or launch an audit engagement from the Annual Plan to conduct fieldwork.
+            </div>
+          )}
         </div>
       </div>
     );

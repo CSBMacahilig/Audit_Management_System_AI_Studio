@@ -105,554 +105,27 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     }
   };
 
-  // Exact top rows from Audit-Management-System (2).png
-  const PLAN_ROWS_2026: {
-    id: string;
-    ref: string;
-    title: string;
-    category: string;
-    entityName: string;
-    likelihood: number;
-    impact: number;
-    riskScore: number;
-    riskLevel: RiskLevel;
-    lead: string;
-    dates: string;
-    days: number;
-    status: AuditEngagement['status'];
-    readyRatio: string;
-    startDatePassed?: boolean;
-  }[] = [
-    {
-      id: 'aud-2026-001',
-      ref: 'AUD-2026-001',
-      title: 'APDS Remittance Reconciliation Audit',
-      category: 'Financial',
-      entityName: 'APDS remittance reconciliation',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: 'A. Villanueva',
-      dates: '2 Feb – 13 Mar 2026',
-      days: 40,
-      status: 'Closed',
-      readyRatio: '5/9 ready',
-    },
-    {
-      id: 'aud-2026-002',
-      ref: 'AUD-2026-002',
-      title: 'Core Banking Privileged Access Review',
-      category: 'Information security',
-      entityName: 'Core Banking – privileged access management',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: 'J. Reyes',
-      dates: '16 Mar – 24 Apr 2026',
-      days: 40,
-      status: 'Closed',
-      readyRatio: '5/9 ready',
-    },
-    {
-      id: 'aud-2026-003',
-      ref: 'AUD-2026-003',
-      title: 'Teacher Salary Loan Origination Audit',
-      category: 'Credit review',
-      entityName: 'Teacher salary loan application (APDS)',
-      likelihood: 4,
-      impact: 5,
-      riskScore: 20,
-      riskLevel: 'Critical',
-      lead: 'A. Villanueva',
-      dates: '27 Apr – 5 Jun 2026',
-      days: 40,
-      status: 'Closed',
-      readyRatio: '5/9 ready',
-    },
-    {
-      id: 'aud-2026-004',
-      ref: 'AUD-2026-004',
-      title: 'Cebu Branch Operations Audit',
-      category: 'Operational',
-      entityName: 'Cebu Branch',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: 'L. Garcia',
-      dates: '8 Jun – 26 Jun 2026',
-      days: 19,
-      status: 'Closed',
-      readyRatio: '5/9 ready',
-    },
-    {
-      id: 'aud-2026-006',
-      ref: 'AUD-2026-006',
-      title: 'Mobile Banking Application Security Review',
-      category: 'Information security',
-      entityName: 'Mobile Banking App – application security',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: 'P. Mendoza',
-      dates: '14 Sept – 23 Oct 2026',
-      days: 40,
-      status: 'Reporting',
-      readyRatio: '8/9 ready',
-    },
-    {
-      id: 'aud-2026-005',
-      ref: 'AUD-2026-005',
-      title: 'Cash Card Loan Release Audit',
-      category: 'Internal control · rescheduled 1×',
-      entityName: 'Loan release via cash card',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: 'K. Lim',
-      dates: '1 Oct – 9 Nov 2026',
-      days: 40,
-      status: 'Reporting',
-      readyRatio: '8/9 ready',
-    },
-    {
-      id: 'aud-2026-086',
-      ref: 'AUD-2026-086',
-      title: 'Operational risk & loss event reporting Audit',
-      category: 'Operational',
-      entityName: 'Operational risk & loss event reporting',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '5 Oct – 30 Oct 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-      startDatePassed: true,
-    },
-    {
-      id: 'aud-2026-072',
-      ref: 'AUD-2026-072',
-      title: 'Iloilo Branch Audit',
-      category: 'Operational',
-      entityName: 'Iloilo Branch',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '12 Oct – 6 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-034',
-      ref: 'AUD-2026-034',
-      title: 'Mobile Banking – authentication & OTP controls Audit',
-      category: 'IT / Systems',
-      entityName: 'Mobile Banking – authentication & OTP controls',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '12 Oct – 13 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-078',
-      ref: 'AUD-2026-078',
-      title: 'Cash-in-Transit Service Provider Audit',
-      category: 'Supplier / Third-party',
-      entityName: 'Cash-in-Transit Service Provider',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '12 Oct – 6 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-007',
-      ref: 'AUD-2026-007',
-      title: 'Stopped Deductions & Unremitted Accounts Audit',
-      category: 'Credit review',
-      entityName: 'Stopped deductions – resigned, transferred, retired or deceased teachers',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: 'A. Villanueva',
-      dates: '12 Oct – 20 Nov 2026',
-      days: 40,
-      status: 'Scheduled',
-      readyRatio: '5/9 ready',
-    },
-    {
-      id: 'aud-2026-055',
-      ref: 'AUD-2026-055',
-      title: 'Walk-in teacher loan application intake Audit',
-      category: 'Operational',
-      entityName: 'Walk-in teacher loan application intake',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '12 Oct – 13 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-021',
-      ref: 'AUD-2026-021',
-      title: 'Loan loss provisioning (ECL) Audit',
-      category: 'Operational',
-      entityName: 'Loan loss provisioning (ECL)',
-      likelihood: 4,
-      impact: 5,
-      riskScore: 20,
-      riskLevel: 'Critical',
-      lead: '—',
-      dates: '19 Oct – 27 Nov 2026',
-      days: 40,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-057',
-      ref: 'AUD-2026-057',
-      title: 'Calamity loan restructuring for teachers Audit',
-      category: 'Operational',
-      entityName: 'Calamity loan restructuring for teachers',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-067',
-      ref: 'AUD-2026-067',
-      title: 'Business continuity management Audit',
-      category: 'Operational',
-      entityName: 'Business continuity management',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-091',
-      ref: 'AUD-2026-091',
-      title: 'Whistleblowing & ethics hotline Audit',
-      category: 'Operational',
-      entityName: 'Whistleblowing & ethics hotline',
-      likelihood: 2,
-      impact: 3,
-      riskScore: 6,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '19 Oct – 13 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-089',
-      ref: 'AUD-2026-089',
-      title: 'Co-maker & guarantor validation Audit',
-      category: 'Operational',
-      entityName: 'Co-maker & guarantor validation',
-      likelihood: 2,
-      impact: 3,
-      riskScore: 6,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '19 Oct – 13 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-058',
-      ref: 'AUD-2026-058',
-      title: 'Retiree & pensioner teacher loans Audit',
-      category: 'Operational',
-      entityName: 'Retiree & pensioner teacher loans',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-073',
-      ref: 'AUD-2026-073',
-      title: 'Cagayan de Oro Branch Audit',
-      category: 'Operational',
-      entityName: 'Cagayan de Oro Branch',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '19 Oct – 13 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-079',
-      ref: 'AUD-2026-079',
-      title: 'Recovery on written-off accounts Audit',
-      category: 'Operational',
-      entityName: 'Recovery on written-off accounts',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '19 Oct – 13 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-066',
-      ref: 'AUD-2026-066',
-      title: 'Credit data submission to CIC Audit',
-      category: 'Supplier / Third-party',
-      entityName: 'Credit data submission to CIC',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-060',
-      ref: 'AUD-2026-060',
-      title: 'Release to authorized representatives (SPA) Audit',
-      category: 'Operational',
-      entityName: 'Release to authorized representatives (SPA)',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-053',
-      ref: 'AUD-2026-053',
-      title: 'Tacloban Branch Audit',
-      category: 'Operational',
-      entityName: 'Tacloban Branch',
-      likelihood: 3,
-      impact: 4,
-      riskScore: 12,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-040',
-      ref: 'AUD-2026-040',
-      title: 'Core Banking Software Vendor – remote support Audit',
-      category: 'Supplier / Third-party',
-      entityName: 'Core Banking Software Vendor – remote support',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-025',
-      ref: 'AUD-2026-025',
-      title: 'Accredited School Marketing Agents Audit',
-      category: 'Supplier / Third-party',
-      entityName: 'Accredited School Marketing Agents',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-010',
-      ref: 'AUD-2026-010',
-      title: 'Cash Card Platform – admin & privileged access Audit',
-      category: 'IT / Systems',
-      entityName: 'Cash Card Platform – admin & privileged access',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: '—',
-      dates: '19 Oct – 27 Nov 2026',
-      days: 40,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-043',
-      ref: 'AUD-2026-043',
-      title: 'Outsourcing & third-party risk management Audit',
-      category: 'Operational',
-      entityName: 'Outsourcing & third-party risk management',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-012',
-      ref: 'AUD-2026-012',
-      title: 'APDS Deduction Interface – file transfer security Audit',
-      category: 'IT / Systems',
-      entityName: 'APDS Deduction Interface – file transfer security',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: '—',
-      dates: '19 Oct – 27 Nov 2026',
-      days: 40,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-085',
-      ref: 'AUD-2026-085',
-      title: 'Data Warehouse & MIS – report integrity Audit',
-      category: 'IT / Systems',
-      entityName: 'Data Warehouse & MIS – report integrity',
-      likelihood: 3,
-      impact: 3,
-      riskScore: 9,
-      riskLevel: 'Medium',
-      lead: '—',
-      dates: '19 Oct – 13 Nov 2026',
-      days: 26,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-031',
-      ref: 'AUD-2026-031',
-      title: 'Third-party Collection Agencies Audit',
-      category: 'Supplier / Third-party',
-      entityName: 'Third-party Collection Agencies',
-      likelihood: 4,
-      impact: 4,
-      riskScore: 16,
-      riskLevel: 'High',
-      lead: '—',
-      dates: '19 Oct – 20 Nov 2026',
-      days: 33,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-014',
-      ref: 'AUD-2026-014',
-      title: 'Core Banking – vulnerability & patch management Audit',
-      category: 'IT / Systems',
-      entityName: 'Core Banking – vulnerability & patch management',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: '—',
-      dates: '19 Oct – 27 Nov 2026',
-      days: 40,
-      status: 'Planned',
-      readyRatio: '2/9 ready',
-    },
-    {
-      id: 'aud-2026-094',
-      ref: 'AUD-2026-094',
-      title: 'Core Banking – privileged access management Audit-Test',
-      category: 'Information security',
-      entityName: 'Core Banking – privileged access management',
-      likelihood: 5,
-      impact: 5,
-      riskScore: 25,
-      riskLevel: 'Critical',
-      lead: 'N. Lopez',
-      dates: '27 Oct – 4 Dec 2026',
-      days: 40,
-      status: 'In progress',
-      readyRatio: '5/9 ready',
-    },
+  const totalBudgetedHours = engagements.reduce(
+    (sum, e) => sum + (e.budgetedHours || 0),
+    0
+  );
+
+  const plannedCount = engagements.filter((e) => e.status === "Planned").length;
+  const scheduledCount = engagements.filter((e) => e.status === "Scheduled").length;
+  const inProgressCount = engagements.filter((e) => e.status === "In progress").length;
+  const reportingCount = engagements.filter((e) => e.status === "Reporting").length;
+  const closedCount = engagements.filter((e) => e.status === "Closed").length;
+
+  const statusFilterTabs = [
+    { id: "All", label: `All ${engagements.length > 0 ? `(${engagements.length})` : ""}`.trim() },
+    { id: "Planned", label: `Planned ${plannedCount}` },
+    { id: "Scheduled", label: `Scheduled ${scheduledCount}` },
+    { id: "In progress", label: `In progress ${inProgressCount}` },
+    { id: "Reporting", label: `Reporting ${reportingCount}` },
+    { id: "Closed", label: `Closed ${closedCount}` },
   ];
 
-  const displayedRows = PLAN_ROWS_2026.filter((row) => {
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      row.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.entityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.lead.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.category.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === 'All' ||
-      row.status.toLowerCase() === statusFilter.toLowerCase();
-
-    return matchesSearch && matchesStatus;
-  });
+  const displayedEngagements = filteredEngagements;
 
   const handleCreateAudit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -721,7 +194,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             Annual audit plan {selectedYear}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
-            93 engagements · 2,920 budgeted hours
+            {engagements.length} {engagements.length === 1 ? 'engagement' : 'engagements'} · {totalBudgetedHours.toLocaleString()} budgeted hours
           </p>
         </div>
 
@@ -737,7 +210,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             type="button"
             onClick={() => {
               onAutoAssignLeads();
-              setBannerMessage('Auditors automatically balanced across planned 2026 engagements by specialization and risk tier.');
+              setBannerMessage('Auditors automatically balanced across planned engagements by specialization and risk tier.');
             }}
             className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-md border border-slate-300 transition-colors cursor-pointer whitespace-nowrap"
           >
@@ -747,7 +220,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             type="button"
             onClick={() => {
               onDraftFromUniverse();
-              setBannerMessage('Drafted overdue Critical/High entities from the Audit Universe into the 2026 Annual Plan.');
+              setBannerMessage('Drafted overdue Critical/High entities from the Audit Universe into the Annual Plan.');
             }}
             className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-md border border-slate-300 transition-colors cursor-pointer whitespace-nowrap"
           >
@@ -776,7 +249,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
         </div>
       )}
 
-      {/* Search & Status Filter Bar matching Audit-Management-System (2).png */}
+      {/* Search & Status Filter Bar */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 flex-1 min-w-[280px]">
           <select
@@ -799,16 +272,9 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
           />
         </div>
 
-        {/* Status Filter Buttons matching Audit-Management-System (2).png */}
+        {/* Dynamic Status Filter Buttons */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { id: 'All', label: 'All' },
-            { id: 'Planned', label: 'Planned 85' },
-            { id: 'Scheduled', label: 'Scheduled 1' },
-            { id: 'In progress', label: 'In progress 1' },
-            { id: 'Reporting', label: 'Reporting 2' },
-            { id: 'Closed', label: 'Closed 4' },
-          ].map((tab) => {
+          {statusFilterTabs.map((tab) => {
             const active = statusFilter === tab.id;
             return (
               <button
@@ -828,7 +294,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
         </div>
       </div>
 
-      {/* Engagements Table matching Audit-Management-System (2).png */}
+      {/* Engagements Table */}
       <div className="mt-5 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -842,55 +308,47 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px]">
-            {displayedRows.map((row) => {
-              const matchedEng =
-                engagements.find((e) => e.id === row.id || e.ref === row.ref) ||
-                engagements[0];
+            {displayedEngagements.map((eng) => {
               return (
                 <tr
-                  key={row.ref}
-                  onClick={() => onSelectEngagement(matchedEng)}
+                  key={eng.id || eng.ref}
+                  onClick={() => onSelectEngagement(eng)}
                   className="hover:bg-purple-50/40 transition-colors cursor-pointer group"
                 >
                   <td className="py-3.5 pr-4 align-top font-mono-tabular text-xs font-medium text-slate-800 whitespace-nowrap">
-                    {row.ref}
+                    {eng.ref}
                   </td>
                   <td className="py-3.5 px-4 align-top">
                     <div className="font-bold text-slate-900 group-hover:text-[#492785] transition-colors">
-                      {row.title}
+                      {eng.title}
                     </div>
-                    <div className="text-xs text-slate-500 mt-0.5">{row.category}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{eng.category}</div>
                   </td>
                   <td className="py-3.5 px-4 align-top">
-                    <div className="text-slate-800 font-medium">{row.entityName}</div>
+                    <div className="text-slate-800 font-medium">{eng.entityName}</div>
                     <div className="flex items-center gap-2 mt-1">
                       <span
                         className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-mono-tabular font-bold ${getRiskBadgeColor(
-                          row.riskLevel
+                          eng.riskLevel
                         )}`}
                       >
-                        {row.likelihood}×{row.impact}={row.riskScore}
+                        {eng.likelihood}×{eng.impact}={eng.riskScore}
                       </span>
-                      <span className="text-xs text-slate-600">{row.riskLevel}</span>
+                      <span className="text-xs text-slate-600">{eng.riskLevel}</span>
                     </div>
                   </td>
                   <td className="py-3.5 px-4 align-top font-medium text-slate-800">
-                    {row.lead}
+                    {eng.lead || '—'}
                   </td>
                   <td className="py-3.5 px-4 align-top tabular-nums">
-                    <div className="text-slate-900 font-medium">{row.dates}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{row.days} days</div>
+                    <div className="text-slate-900 font-medium">{eng.startDate} – {eng.endDate}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{eng.durationDays} days</div>
                   </td>
                   <td className="py-3.5 pl-4 align-top">
                     <div className="flex flex-col items-start gap-1">
-                      {getStatusBadge(row.status)}
-                      {row.startDatePassed && (
-                        <span className="text-[11px] font-semibold text-[#B93829] leading-tight">
-                          Start date passed
-                        </span>
-                      )}
+                      {getStatusBadge(eng.status)}
                       <span className="inline-block px-2 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono-tabular text-slate-600">
-                        {row.readyRatio}
+                        {eng.readyRatio || '0/9 ready'}
                       </span>
                     </div>
                   </td>
@@ -898,10 +356,31 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
               );
             })}
 
-            {displayedRows.length === 0 && (
+            {displayedEngagements.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
-                  No audit engagements match your current filter criteria.
+                <td colSpan={6} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center max-w-md mx-auto">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    {engagements.length === 0 ? (
+                      <>
+                        <p className="text-sm font-semibold text-slate-800">No audit engagements yet</p>
+                        <p className="text-xs text-slate-500 mt-1 mb-4">The audit database is fresh and ready for testing. Click &ldquo;New audit&rdquo; to plan an audit or &ldquo;Draft from universe&rdquo; to generate engagements from registered entities.</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowNewModal(true)}
+                          className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                        >
+                          + Plan First Audit
+                        </button>
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-500">No audit engagements match your current filter criteria.</p>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
