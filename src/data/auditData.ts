@@ -104,6 +104,18 @@ export interface UserProfile {
   canApproveHead: boolean;
   canApproveIndependent: boolean;
   canApproveCAE: boolean;
+  // ── BSSC V3 Security Fields ──────────────────────────────────────────────
+  /** AL-4.3 / IA-1 */ employeeNumber?: string;
+  /** AL-4.4        */ lastLoginDate?: string;        // ISO 8601
+  /** AL-4.5        */ accountModifiedAt?: string;    // ISO 8601
+  /** AL-4.7 / IA-1 */ accountStatus?: 'Active' | 'Inactive' | 'Deactivated';
+  /** IA-8          */ failedLoginCount?: number;
+  /** IA-9          */ isLocked?: boolean;
+  /** PM-3          */ requiresPasswordChange?: boolean; // forced on first login
+  /** PM-6          */ passwordLastChanged?: string;  // ISO 8601
+  /** PM-5          */ passwordHistory?: string[];    // last 6 hashed passwords (simulated)
+  /** IA-4          */ mfaEnabled?: boolean;
+  /** IA-11         */ isPrivileged?: boolean;        // admin/root accounts for OCISO register
 }
 
 export const USERS: UserProfile[] = [
@@ -117,6 +129,18 @@ export const USERS: UserProfile[] = [
     canApproveHead: true,
     canApproveIndependent: true,
     canApproveCAE: true,
+    // BSSC V3 security fields
+    employeeNumber: 'EMP-001',
+    lastLoginDate: '2026-11-06T07:00:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-08-01T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: true,
+    isPrivileged: true,
   },
   {
     id: 'r-dizon',
@@ -128,6 +152,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: true,
     canApproveIndependent: true,
     canApproveCAE: false,
+    employeeNumber: 'EMP-002',
+    lastLoginDate: '2026-11-05T09:30:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-07-20T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: true,
+    isPrivileged: true,
   },
   {
     id: 'a-villanueva',
@@ -139,6 +174,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: false,
     canApproveIndependent: true,
     canApproveCAE: false,
+    employeeNumber: 'EMP-003',
+    lastLoginDate: '2026-11-06T08:15:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-09-10T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: true,
+    isPrivileged: false,
   },
   {
     id: 'p-mendoza',
@@ -150,6 +196,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: false,
     canApproveIndependent: true,
     canApproveCAE: false,
+    employeeNumber: 'EMP-004',
+    lastLoginDate: '2026-11-04T14:00:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-06-15T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: true,
+    isPrivileged: false,
   },
   {
     id: 'k-lim',
@@ -161,6 +218,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: false,
     canApproveIndependent: true,
     canApproveCAE: false,
+    employeeNumber: 'EMP-005',
+    lastLoginDate: '2026-11-05T11:45:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-09-01T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: false,
+    isPrivileged: false,
   },
   {
     id: 'e-navarro',
@@ -172,6 +240,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: false,
     canApproveIndependent: false,
     canApproveCAE: false,
+    employeeNumber: 'EMP-006',
+    lastLoginDate: '2026-10-30T10:00:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-05-01T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: false,
+    isPrivileged: false,
   },
   {
     id: 'g-soriano',
@@ -183,6 +262,17 @@ export const USERS: UserProfile[] = [
     canApproveHead: false,
     canApproveIndependent: false,
     canApproveCAE: false,
+    employeeNumber: 'EMP-007',
+    lastLoginDate: '2026-10-28T09:00:00Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-04-15T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: false,
+    isPrivileged: false,
   },
 ];
 

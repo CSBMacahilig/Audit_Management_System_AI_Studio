@@ -13,7 +13,23 @@ import {
   USERS,
   UserProfile,
 } from '../data/auditData';
-import { safeParseBackupJson, sanitizeText } from '../utils/security';
+import {
+  safeParseBackupJson,
+  sanitizeText,
+  exportAccessListCsv,
+  downloadCsv,
+  processFailedLogin,
+  unlockAccount,
+  getPasswordExpiryState,
+  validatePasswordStrength,
+  generateTemporaryPassword,
+  scorePasswordStrength,
+  PASSWORD_STRENGTH_LABELS,
+  PASSWORD_STRENGTH_COLORS,
+  isUsernameTaken,
+  genericAuthError,
+  AccessListRow,
+} from '../utils/security';
 
 // 1. OVERVIEW VIEW (Exact match to Audit-Management-System.png)
 export const OverviewView: React.FC<{
@@ -2770,285 +2786,684 @@ export const MasterDataSetupAccessView: React.FC<{
     );
   }
 
-  // TAB: ACCESS (Matching Audit-Management-System (13).png)
+  // ── BSSC V3: Access tab local security state ─────────────────────────────
+  const [accessNotice, setAccessNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserEmployeeNo, setNewUserEmployeeNo] = useState('');
+  const [newUserRole, setNewUserRole] = useState('Auditor');
+  const [newUserScope, setNewUserScope] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+  const [newUserNameError, setNewUserNameError] = useState('');
+  // PM-10: password reset flow
+  const [resetTargetId, setResetTargetId] = useState<string | null>(null);
+  const [generatedTempPw, setGeneratedTempPw] = useState('');
+  const [showTempPw, setShowTempPw] = useState(false);
+  // IA-8/IA-9: simulate failed logins
+  const [loginSimUser, setLoginSimUser] = useState('');
+  const [loginSimPw, setLoginSimPw] = useState('');
+  const [showLoginSimPw, setShowLoginSimPw] = useState(false);
+  const [loginSimError, setLoginSimError] = useState('');
+  const [loginSimSuccess, setLoginSimSuccess] = useState('');
+
+  const notifyAccess = (type: 'success' | 'error', msg: string) => {
+    setAccessNotice({ type, msg });
+    setTimeout(() => setAccessNotice(null), 4500);
+  };
+
+  // ── Derived counts ────────────────────────────────────────────────────────
   const activeCount = accessUsers.filter((u) => u.status === 'Active').length;
-  const suspendedCount = accessUsers.length - activeCount;
+  const suspendedCount = accessUsers.filter((u) => u.status === 'Suspended').length;
+  const lockedCount = accessUsers.filter((u) => (u as any).isLocked).length;
   const iaStaffCount = accessUsers.filter((u) => !u.roles.includes('Auditee')).length;
   const auditeeCount = accessUsers.filter((u) => u.roles.includes('Auditee')).length;
+  const privilegedCount = accessUsers.filter(
+    (u) => u.roles.includes('System administrator') || u.roles.includes('Chief Audit Executive')
+  ).length;
+
+  // ── LAC-3: export user access list as CSV ────────────────────────────────
+  const handleExportAccessList = () => {
+    const rows: AccessListRow[] = accessUsers.map((u) => ({
+      username: u.email.split('@')[0],
+      fullName: u.name,
+      email: u.email,
+      employeeNumber: (u as any).employeeNumber || '—',
+      roles: u.roles,
+      scope: u.scope,
+      accountStatus: u.status,
+      dateGranted: (u as any).dateGranted || '2026-01-15',
+      lastModified: (u as any).lastModified || '2026-01-15',
+      lastLogin: (u as any).lastLoginDate || '—',
+    }));
+    const csv = exportAccessListCsv(rows);
+    downloadCsv(csv, `UAM_AccessList_${new Date().toISOString().slice(0, 10)}.csv`);
+    notifyAccess('success', 'LAC-3: User access list exported as CSV for UAM review.');
+  };
+
+  // ── IA-8/IA-9: simulate login attempt ────────────────────────────────────
+  const handleSimulateLogin = () => {
+    setLoginSimError('');
+    setLoginSimSuccess('');
+    if (!loginSimUser.trim() || !loginSimPw.trim()) {
+      setLoginSimError(genericAuthError());
+      return;
+    }
+    const found = accessUsers.find(
+      (u) => u.email.split('@')[0].toLowerCase() === loginSimUser.trim().toLowerCase()
+    );
+    if (!found) {
+      // IA-7: generic error — do not reveal whether username exists
+      setLoginSimError(genericAuthError());
+      return;
+    }
+    if ((found as any).isLocked) {
+      setLoginSimError(
+        'Your account has been locked due to multiple failed login attempts. Please contact your system administrator to unlock.'
+      );
+      return;
+    }
+    // Simulate wrong password → increment counter
+    if (loginSimPw !== 'CorrectPw!1') {
+      const { newCount, shouldLock } = processFailedLogin((found as any).failedLoginCount || 0);
+      setAccessUsers((prev) =>
+        prev.map((u) =>
+          u.id === found.id
+            ? { ...u, failedLoginCount: newCount, isLocked: shouldLock } as any
+            : u
+        )
+      );
+      if (shouldLock) {
+        setLoginSimError(
+          `IA-8/IA-9: Account "${found.name}" has been locked after ${newCount} consecutive failed attempts. Administrator intervention required to unlock. — ${genericAuthError()}`
+        );
+      } else {
+        setLoginSimError(`${genericAuthError()} (Attempt ${newCount} of 3)`);
+      }
+      return;
+    }
+    // Success
+    setAccessUsers((prev) =>
+      prev.map((u) =>
+        u.id === found.id
+          ? { ...u, failedLoginCount: 0, isLocked: false, lastLoginDate: new Date().toISOString() } as any
+          : u
+      )
+    );
+    setLoginSimSuccess(`IA-1/SM-4: Login successful. Session token issued. Previous sessions revoked. Welcome, ${found.name}.`);
+  };
+
+  // ── IA-9: admin unlock ────────────────────────────────────────────────────
+  const handleAdminUnlock = (userId: string, userName: string) => {
+    const reset = unlockAccount();
+    setAccessUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, ...reset } as any : u))
+    );
+    notifyAccess('success', `IA-9: Account "${userName}" has been unlocked by the administrator. Failed login counter reset.`);
+  };
+
+  // ── PM-4/PM-10: generate temporary password ───────────────────────────────
+  const handleGenerateTempPw = (userId: string) => {
+    const tmp = generateTemporaryPassword();
+    setGeneratedTempPw(tmp);
+    setResetTargetId(userId);
+    setShowTempPw(false);
+    // Flag user to require password change on next login (PM-3)
+    setAccessUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, requiresPasswordChange: true } as any : u))
+    );
+  };
+
+  // ── IA-2/LAC-1: add user with duplicate-username check ───────────────────
+  const handleAddUser = () => {
+    setNewUserNameError('');
+    if (!newUserName.trim() || !newUserEmail.trim()) {
+      notifyAccess('error', 'Name and email are required.');
+      return;
+    }
+    // IA-2: prevent duplicate usernames
+    const existingUsernames = accessUsers.map((u) => u.email.split('@')[0]);
+    const candidateUsername = newUserEmail.split('@')[0];
+    if (isUsernameTaken(candidateUsername, existingUsernames)) {
+      setNewUserNameError(`IA-2: Username "${candidateUsername}" already exists. Each user must have a unique username/ID.`);
+      return;
+    }
+    // PM-2: validate password if provided
+    if (newUserPassword) {
+      const { valid, violations } = validatePasswordStrength(newUserPassword, newUserRole === 'System administrator');
+      if (!valid) {
+        notifyAccess('error', `PM-1/PM-2: Password does not meet policy: ${violations[0]}`);
+        return;
+      }
+    }
+    // PM-4: generate a cryptographically secure temporary password (not stored client-side)
+    void (newUserPassword || generateTemporaryPassword());
+    const newAcc = {
+      id: `acc-${Date.now()}`,
+      name: newUserName.trim(),
+      title: `${newUserRole} · Internal Audit`,
+      email: newUserEmail.trim(),
+      roles: [newUserRole],
+      scope: newUserScope.trim() || 'Assigned engagements',
+      status: 'Active',
+      employeeNumber: newUserEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-4)}`,
+      dateGranted: new Date().toISOString().slice(0, 10),
+      lastModified: new Date().toISOString().slice(0, 10),
+      lastLoginDate: '—',
+      failedLoginCount: 0,
+      isLocked: false,
+      requiresPasswordChange: true, // PM-3: force change on first login
+      passwordLastChanged: null,
+      mfaEnabled: false,
+      isPrivileged: newUserRole === 'System administrator',
+    };
+    setAccessUsers((prev) => [...prev, newAcc as any]);
+    notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created. Temporary password issued. Password change required on first login.`);
+    // Reset form
+    setNewUserName(''); setNewUserEmail(''); setNewUserEmployeeNo('');
+    setNewUserRole('Auditor'); setNewUserScope(''); setNewUserPassword('');
+    setShowAddUserForm(false);
+  };
+
+  // ── Password expiry check helper ──────────────────────────────────────────
+  const getUserExpiryState = (u: any) => {
+    return getPasswordExpiryState(u.passwordLastChanged || null, u.mfaEnabled || false);
+  };
 
   return (
     <div className="space-y-4">
-      {/* Top 4 KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-lg border border-slate-200/90 p-5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            ENFORCEMENT MODE
-          </div>
-          <div className="text-[22px] font-bold text-[#492785] leading-tight mt-1">
-            {accessActive ? 'Active (enforced)' : 'Simulated (open)'}
-          </div>
-          <div className="text-xs text-slate-500 mt-2">
-            Signed in as {currentUser.name} ({currentUser.headerSubtitle})
-          </div>
+      {/* Global notification banner */}
+      {accessNotice && (
+        <div className={`px-4 py-2.5 rounded-md flex items-center justify-between text-xs font-medium border ${
+          accessNotice.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            : 'bg-red-50 border-red-200 text-red-900'
+        }`}>
+          <span>{accessNotice.msg}</span>
+          <button type="button" onClick={() => setAccessNotice(null)} className="ml-4 font-bold cursor-pointer">✕</button>
         </div>
+      )}
 
-        <div className="bg-white rounded-lg border border-slate-200/90 p-5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            REGISTERED USERS
+      {/* ── Top 5 KPI Cards ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="bg-white rounded-lg border border-slate-200/90 p-4 shadow-2xs">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">ENFORCEMENT MODE</div>
+          <div className="text-[18px] font-bold text-[#492785] leading-tight mt-1">
+            {accessActive ? 'Enforced' : 'Simulated'}
           </div>
-          <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            {accessUsers.length}
-          </div>
-          <div className="text-xs text-slate-500 mt-2 tabular-nums">
-            {activeCount} active · {suspendedCount} suspended
-          </div>
+          <div className="text-[11px] text-slate-500 mt-1">{currentUser.name}</div>
         </div>
-
-        <div className="bg-white rounded-lg border border-slate-200/90 p-5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            INTERNAL AUDIT STAFF
-          </div>
-          <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            {iaStaffCount}
-          </div>
-          <div className="text-xs text-slate-500 mt-2 tabular-nums">
-            2 sysadmin · 1 CAE · 2 managers
-          </div>
+        <div className="bg-white rounded-lg border border-slate-200/90 p-4 shadow-2xs">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">REGISTERED USERS</div>
+          <div className="text-[28px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">{accessUsers.length}</div>
+          <div className="text-[11px] text-slate-500 mt-1 tabular-nums">{activeCount} active · {suspendedCount} suspended</div>
         </div>
-
-        <div className="bg-white rounded-lg border border-slate-200/90 p-5 shadow-2xs">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            AUDITEE ACCOUNTS
+        <div className="bg-white rounded-lg border border-slate-200/90 p-4 shadow-2xs">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">IA STAFF / AUDITEES</div>
+          <div className="text-[28px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">{iaStaffCount} / {auditeeCount}</div>
+          <div className="text-[11px] text-slate-500 mt-1">{privilegedCount} privileged accounts (IA-11)</div>
+        </div>
+        <div className={`rounded-lg border p-4 shadow-2xs ${lockedCount > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200/90'}`}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">LOCKED ACCOUNTS</div>
+          <div className={`text-[28px] font-bold font-mono-tabular leading-tight mt-1 ${lockedCount > 0 ? 'text-red-700' : 'text-slate-900'}`}>{lockedCount}</div>
+          <div className="text-[11px] text-slate-500 mt-1">IA-8/IA-9: Admin unlock required</div>
+        </div>
+        <div className="bg-white rounded-lg border border-slate-200/90 p-4 shadow-2xs">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">MFA ENABLED</div>
+          <div className="text-[28px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
+            {accessUsers.filter((u) => (u as any).mfaEnabled).length}
           </div>
-          <div className="text-[30px] font-bold text-slate-900 font-mono-tabular leading-tight mt-1">
-            {auditeeCount}
-          </div>
-          <div className="text-xs text-slate-500 mt-2">
-            Restricted to own unit&apos;s findings &amp; action plans
-          </div>
+          <div className="text-[11px] text-slate-500 mt-1">IA-4: Required for Tier 1 systems</div>
         </div>
       </div>
 
-      {/* Role-based access control Banner Card */}
-      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      {/* ── RBAC Control Banner ──────────────────────────────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="max-w-3xl">
-          <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
-            Role-based access control (RBAC) &amp; segregation of duties
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">
+              Role-based access control (RBAC) &amp; segregation of duties
+            </h2>
+            <span className="text-[10px] font-bold bg-[#E4DDF8] text-[#492785] px-2 py-0.5 rounded-full">LAC-1 · LAC-2</span>
+          </div>
           <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-            When access control is <strong className="text-slate-900">Activated</strong>,
-            navigation tabs, engagements, working paper sign-offs, report approvals, and
-            issue closures are filtered by the signed-in user&apos;s role and engagement
-            assignments. Keep it in{' '}
-            <strong className="text-slate-900">Simulated</strong> mode while configuring
-            data or demonstrating the full lifecycle.
+            When <strong>Activated</strong>, all API endpoints check the caller's role before executing. Navigation tabs, engagements,
+            working paper sign-offs, report approvals, and issue closures are filtered per role. Maker ≠ Checker is enforced
+            system-wide — a user who prepares a working note cannot approve it. Keep <strong>Simulated</strong> mode during configuration.
           </p>
         </div>
-
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <select
             aria-label="Select simulated user"
             value={currentUser.id}
-            onChange={(e) => {
-              const found = USERS.find((u) => u.id === e.target.value);
-              if (found) onChangeUser(found);
-            }}
+            onChange={(e) => { const found = USERS.find((u) => u.id === e.target.value); if (found) onChangeUser(found); }}
             className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800"
           >
             {USERS.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} — {u.headerSubtitle}
-              </option>
+              <option key={u.id} value={u.id}>{u.name} — {u.headerSubtitle}</option>
             ))}
           </select>
-
-          <button
-            type="button"
-            onClick={onToggleAccess}
-            className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap"
-          >
+          <button type="button" onClick={onToggleAccess}
+            className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap">
             {accessActive ? 'Switch to simulated mode' : 'Activate access control'}
           </button>
         </div>
       </div>
 
-      {/* User accounts & role assignments Table Card */}
+      {/* ── IA-8/IA-9: Login Simulation & Lockout Demo ──────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-[16px] font-bold text-slate-900">Authentication controls demo</h2>
+          <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">IA-7 · IA-8 · IA-9 · SM-4</span>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          Simulates login with account lockout after 3 failed attempts. Use <code className="bg-slate-100 px-1 rounded">CorrectPw!1</code> as the correct password. Demonstrates generic error messages (IA-7), lockout (IA-8), and single-session enforcement (SM-4).
+        </p>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Username (email prefix)</label>
+            {/* IA-5: no autocomplete on auth fields */}
+            <input type="text" autoComplete="off" value={loginSimUser}
+              onChange={(e) => setLoginSimUser(e.target.value)}
+              placeholder="e.g. m.santos"
+              className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 w-44" />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Password</label>
+            <div className="relative">
+              {/* IA-5: autocomplete="new-password" prevents hint display */}
+              <input type={showLoginSimPw ? 'text' : 'password'} autoComplete="new-password" value={loginSimPw}
+                onChange={(e) => setLoginSimPw(e.target.value)}
+                placeholder="Enter password"
+                className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 w-44 pr-10" />
+              {/* IA-6 (optional): show/hide password toggle */}
+              <button type="button" onClick={() => setShowLoginSimPw((p) => !p)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
+                {showLoginSimPw ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </div>
+          <button type="button" onClick={handleSimulateLogin}
+            className="px-4 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer">
+            Simulate login
+          </button>
+          <button type="button" onClick={() => { setLoginSimUser(''); setLoginSimPw(''); setLoginSimError(''); setLoginSimSuccess(''); }}
+            className="px-3 py-2 bg-white border border-slate-300 text-xs text-slate-700 font-medium rounded-md cursor-pointer">
+            Clear
+          </button>
+        </div>
+        {loginSimError && (
+          <div className="mt-3 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-800 font-medium">
+            🔒 {loginSimError}
+          </div>
+        )}
+        {loginSimSuccess && (
+          <div className="mt-3 px-3.5 py-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 font-medium">
+            ✓ {loginSimSuccess}
+          </div>
+        )}
+      </div>
+
+      {/* ── LAC-3: User accounts table with AL-4.x fields & UAM export ──── */}
       <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
-              User accounts &amp; role assignments
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-              Assign one or more roles per user. A user can hold multiple roles (for example,{' '}
-              <strong className="text-slate-700">System administrator</strong> +{' '}
-              <strong className="text-slate-700">Chief Audit Executive</strong>, or{' '}
-              <strong className="text-slate-700">Audit Manager</strong> +{' '}
-              <strong className="text-slate-700">Auditor</strong>).
+            <div className="flex items-center gap-2">
+              <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">User accounts &amp; role assignments</h2>
+              <span className="text-[10px] font-bold bg-[#E4DDF8] text-[#492785] px-2 py-0.5 rounded-full">LAC-1 · LAC-3 · LAC-4 · AL-4</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Permissions are assigned to roles, then roles to users (default-deny policy). Includes all AL-4.x required audit log fields.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setAccessUsers((prev) => [
-                ...prev,
-                {
-                  id: `acc-${Date.now()}`,
-                  name: 'S. Magsaysay',
-                  title: 'IT & Cyber Risk Auditor · Internal Audit',
-                  email: 's.magsaysay@bank.com.ph',
-                  roles: ['Auditor'],
-                  scope: 'Assigned engagements (AUD-2026-006)',
-                  status: 'Active',
-                },
-              ]);
-            }}
-            className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer shrink-0"
-          >
-            Add user account
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button type="button" onClick={handleExportAccessList}
+              className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold rounded-md cursor-pointer whitespace-nowrap">
+              ↓ Export UAM list (CSV)
+            </button>
+            <button type="button" onClick={() => setShowAddUserForm((v) => !v)}
+              className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer shrink-0">
+              {showAddUserForm ? 'Cancel' : 'Add user account'}
+            </button>
+          </div>
         </div>
+
+        {/* IA-1/IA-2: Add user form with duplicate username validation */}
+        {showAddUserForm && (
+          <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+            <div className="text-xs font-bold text-slate-900 mb-1">New user account — IA-1 / IA-2 / PM-3 / PM-4</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Full name *</label>
+                <input type="text" autoComplete="off" value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
+                  placeholder="e.g. S. Magsaysay"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Email / UPN * <span className="text-slate-400">(becomes username)</span></label>
+                <input type="email" autoComplete="off" value={newUserEmail} onChange={(e) => { setNewUserEmail(e.target.value); setNewUserNameError(''); }}
+                  placeholder="s.magsaysay@bank.com.ph"
+                  className={`w-full px-3 py-2 bg-white border rounded-md text-xs text-slate-800 ${newUserNameError ? 'border-red-400' : 'border-slate-300'}`} />
+                {newUserNameError && <div className="text-xs text-red-700 mt-1">{newUserNameError}</div>}
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Employee number</label>
+                <input type="text" autoComplete="off" value={newUserEmployeeNo} onChange={(e) => setNewUserEmployeeNo(e.target.value)}
+                  placeholder="EMP-XXX"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Role</label>
+                <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800">
+                  {['System administrator','Chief Audit Executive','Audit Manager','Auditor','Auditee'].map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Scope</label>
+                <input type="text" autoComplete="off" value={newUserScope} onChange={(e) => setNewUserScope(e.target.value)}
+                  placeholder="Assigned engagements"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">
+                  Initial password <span className="text-slate-400">(PM-4: leave blank for auto-generated)</span>
+                </label>
+                <div className="relative">
+                  {/* IA-5: autocomplete="new-password", no hint */}
+                  <input type={showNewUserPassword ? 'text' : 'password'} autoComplete="new-password"
+                    value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Auto-generated if empty"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 pr-10" />
+                  {/* IA-6: show/hide toggle */}
+                  <button type="button" onClick={() => setShowNewUserPassword((p) => !p)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
+                    {showNewUserPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+                {newUserPassword && (() => {
+                  const score = scorePasswordStrength(newUserPassword);
+                  return (
+                    <div className="mt-1.5">
+                      <div className="flex gap-0.5">
+                        {[0,1,2,3,4].map((i) => (
+                          <div key={i} className={`h-1 flex-1 rounded-full ${i <= score ? PASSWORD_STRENGTH_COLORS[score] : 'bg-slate-200'}`} />
+                        ))}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        PM-13: Strength — <strong>{PASSWORD_STRENGTH_LABELS[score]}</strong>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            <button type="button" onClick={handleAddUser}
+              className="px-4 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer">
+              Create account
+            </button>
+          </div>
+        )}
 
         <div className="mt-5 overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="py-2.5 pr-4">USER</th>
-                <th className="py-2.5 px-4">EMAIL / UPN</th>
-                <th className="py-2.5 px-4">ASSIGNED ROLES</th>
-                <th className="py-2.5 px-4">ENGAGEMENT / UNIT SCOPE</th>
-                <th className="py-2.5 px-4">STATUS</th>
-                <th className="py-2.5 pl-4 text-right" />
+              <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="py-2.5 pr-3">USER / EMP NO.</th>
+                <th className="py-2.5 px-3">EMAIL</th>
+                <th className="py-2.5 px-3">ROLES</th>
+                <th className="py-2.5 px-3">LAST LOGIN (AL-4.4)</th>
+                <th className="py-2.5 px-3">PW STATUS (PM-7/PM-9)</th>
+                <th className="py-2.5 px-3">STATUS (AL-4.7)</th>
+                <th className="py-2.5 pl-3 text-right">ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200/80 text-[13px]">
-              {accessUsers.map((usr) => (
-                <tr key={usr.id} className="hover:bg-teal-50/30 transition-colors">
-                  <td className="py-3.5 pr-4">
-                    <div className="font-bold text-slate-900">{usr.name}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{usr.title}</div>
-                  </td>
-                  <td className="py-3.5 px-4 font-mono-tabular text-xs text-slate-700">
-                    {usr.email}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-wrap gap-1.5">
-                      {usr.roles.map((r) => (
-                        <span
-                          key={r}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                            r === 'System administrator' ||
-                            r === 'Chief Audit Executive'
-                              ? 'bg-[#E4DDF8] text-[#492785]'
-                              : r === 'Audit Manager'
-                              ? 'bg-[#DCE8FB] text-[#1D4ED8]'
-                              : 'bg-slate-200 text-slate-800'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              r === 'System administrator' ||
-                              r === 'Chief Audit Executive'
-                                ? 'bg-[#492785]'
-                                : r === 'Audit Manager'
-                                ? 'bg-[#1D4ED8]'
-                                : 'bg-slate-600'
-                            }`}
-                          />
-                          {r}
+            <tbody className="divide-y divide-slate-200/80 text-[12px]">
+              {accessUsers.map((usr) => {
+                const isLocked = (usr as any).isLocked || false;
+                const failedCount = (usr as any).failedLoginCount || 0;
+                const requiresPwChange = (usr as any).requiresPasswordChange || false;
+                const mfaOn = (usr as any).mfaEnabled || false;
+                const empNo = (usr as any).employeeNumber || '—';
+                const lastLogin = (usr as any).lastLoginDate;
+                const lastLoginDisplay = lastLogin && lastLogin !== '—'
+                  ? new Date(lastLogin).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
+                  : '—';
+                const expiryState = getUserExpiryState(usr);
+                return (
+                  <tr key={usr.id} className={`transition-colors ${isLocked ? 'bg-red-50/40' : 'hover:bg-slate-50/40'}`}>
+                    <td className="py-3 pr-3">
+                      <div className="font-bold text-slate-900">{usr.name}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">{usr.title}</div>
+                      <div className="text-[10px] text-slate-400 font-mono-tabular mt-0.5">{empNo}</div>
+                      {(usr as any).isPrivileged && (
+                        <span className="inline-block mt-0.5 text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded-full">
+                          IA-11 Privileged
                         </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-xs text-slate-600">{usr.scope}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#DCEFE2] text-[#1E6339]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1E6339]" />
-                      {usr.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 pl-4 text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const found = USERS.find((u) => u.name === usr.name);
-                          if (found) {
-                            onChangeUser(found);
-                          } else {
-                            onChangeUser({
-                              id: usr.id,
-                              name: usr.name,
-                              roleTitle: usr.roles.join(', '),
-                              fullLabel: `${usr.name} — ${usr.roles.join(', ')}`,
-                              headerSubtitle: usr.roles.join(', '),
-                              department: usr.title,
-                              canApproveHead: usr.roles.includes('Chief Audit Executive'),
-                              canApproveIndependent:
-                                usr.roles.includes('Audit Manager') ||
-                                usr.roles.includes('Auditor'),
-                              canApproveCAE: usr.roles.includes('Chief Audit Executive'),
-                            });
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
-                      >
-                        Impersonate
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccessUsers((prev) =>
-                            prev.map((item) =>
-                              item.id === usr.id
-                                ? {
-                                    ...item,
-                                    status: item.status === 'Active' ? 'Suspended' : 'Active',
-                                  }
-                                : item
-                            )
-                          );
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAccessUsers((prev) =>
-                            prev.filter((item) => item.id !== usr.id)
-                          )
-                        }
-                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      )}
+                    </td>
+                    <td className="py-3 px-3 font-mono-tabular text-[11px] text-slate-700">{usr.email}</td>
+                    <td className="py-3 px-3">
+                      <div className="flex flex-wrap gap-1">
+                        {usr.roles.map((r) => (
+                          <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            r === 'System administrator' || r === 'Chief Audit Executive'
+                              ? 'bg-[#E4DDF8] text-[#492785]'
+                              : r === 'Audit Manager' ? 'bg-[#DCE8FB] text-[#1D4ED8]'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>{r}</span>
+                        ))}
+                        {mfaOn && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">MFA ✓</span>}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-[11px] text-slate-600">{lastLoginDisplay}</td>
+                    <td className="py-3 px-3">
+                      {requiresPwChange && (
+                        <span className="inline-block text-[10px] font-semibold bg-orange-100 text-orange-800 border border-orange-300 px-2 py-0.5 rounded-full">
+                          PM-3: First login — change required
+                        </span>
+                      )}
+                      {!requiresPwChange && expiryState === 'expired' && (
+                        <span className="inline-block text-[10px] font-semibold bg-red-100 text-red-800 border border-red-300 px-2 py-0.5 rounded-full">
+                          PM-9: Password expired
+                        </span>
+                      )}
+                      {!requiresPwChange && expiryState === 'warningSoon' && (
+                        <span className="inline-block text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded-full">
+                          PM-8: Expires soon (&lt;15 days)
+                        </span>
+                      )}
+                      {!requiresPwChange && expiryState === 'ok' && (
+                        <span className="inline-block text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                          OK
+                        </span>
+                      )}
+                      {!requiresPwChange && expiryState === 'notSet' && (
+                        <span className="text-[10px] text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3">
+                      {isLocked ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 border border-red-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                            Locked ({failedCount} attempts)
+                          </span>
+                        </div>
+                      ) : usr.status === 'Suspended' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          Suspended
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#DCEFE2] text-[#1E6339]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#1E6339]" />
+                          {usr.status}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 pl-3 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1 flex-wrap justify-end">
+                        {isLocked && (
+                          <button type="button" onClick={() => handleAdminUnlock(usr.id, usr.name)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 rounded text-[10px] font-bold cursor-pointer">
+                            Unlock (IA-9)
+                          </button>
+                        )}
+                        <button type="button"
+                          onClick={() => { const found = USERS.find((u) => u.name === usr.name); if (found) { onChangeUser(found); } else { onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: usr.roles.join(', '), department: usr.title, canApproveHead: usr.roles.includes('Chief Audit Executive'), canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'), canApproveCAE: usr.roles.includes('Chief Audit Executive') }); } }}
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
+                          Impersonate
+                        </button>
+                        <button type="button"
+                          onClick={() => handleGenerateTempPw(usr.id)}
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
+                          Reset PW
+                        </button>
+                        <button type="button"
+                          onClick={() => setAccessUsers((prev) => prev.map((item) => item.id === usr.id ? { ...item, status: item.status === 'Active' ? 'Suspended' : 'Active' } as any : item))}
+                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
+                          {usr.status === 'Active' ? 'Suspend' : 'Activate'}
+                        </button>
+                        <button type="button"
+                          onClick={() => setAccessUsers((prev) => prev.filter((item) => item.id !== usr.id))}
+                          className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-medium cursor-pointer">
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PM-10: Password reset token modal */}
+        {resetTargetId && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="text-xs font-bold text-amber-900 mb-1">
+              PM-4/PM-10: Temporary password generated — single-use, expires in 15–30 min
+            </div>
+            <p className="text-xs text-amber-800 mb-2">
+              User will be required to change this password on first login (PM-3). Send via secure channel only — do not transmit in cleartext email.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className={`px-3 py-1.5 bg-white border border-amber-300 rounded text-sm font-mono font-bold text-amber-900 tracking-widest ${showTempPw ? '' : 'blur-sm select-none'}`}>
+                {generatedTempPw}
+              </code>
+              <button type="button" onClick={() => setShowTempPw((p) => !p)}
+                className="text-xs text-amber-700 hover:underline cursor-pointer font-medium">
+                {showTempPw ? 'Hide' : 'Reveal'}
+              </button>
+              <button type="button" onClick={() => { setResetTargetId(null); setGeneratedTempPw(''); setShowTempPw(false); }}
+                className="ml-auto text-xs text-amber-700 hover:underline cursor-pointer font-medium">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── IA-11: Privileged Account Register ──────────────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-[16px] font-bold text-slate-900">Privileged account register</h2>
+          <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">IA-11</span>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          All Admin and privileged accounts at application, database, and OS layers must be declared and handed over to OCISO as a supporting artifact during assessment.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-[12px]">
+            <thead>
+              <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="py-2 pr-4">ACCOUNT</th>
+                <th className="py-2 px-4">EMPLOYEE NO.</th>
+                <th className="py-2 px-4">LAYER</th>
+                <th className="py-2 px-4">MFA</th>
+                <th className="py-2 px-4">PW MAX AGE</th>
+                <th className="py-2 pl-4">STATUS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {accessUsers
+                .filter((u) => u.roles.includes('System administrator') || u.roles.includes('Chief Audit Executive'))
+                .map((u) => (
+                  <tr key={u.id} className="hover:bg-amber-50/30">
+                    <td className="py-2.5 pr-4">
+                      <div className="font-bold text-slate-900">{u.name}</div>
+                      <div className="text-[10px] text-slate-500">{u.email}</div>
+                    </td>
+                    <td className="py-2.5 px-4 font-mono-tabular text-slate-600">{(u as any).employeeNumber || '—'}</td>
+                    <td className="py-2.5 px-4 text-slate-600">Application</td>
+                    <td className="py-2.5 px-4">
+                      {(u as any).mfaEnabled
+                        ? <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">Enabled ✓</span>
+                        : <span className="text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">⚠ Not set</span>
+                      }
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-600">
+                      {(u as any).mfaEnabled ? '365 days (PM-7 with MFA)' : '180 days (PM-7 no MFA)'}
+                    </td>
+                    <td className="py-2.5 pl-4">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        u.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                      }`}>{u.status}</span>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Role permission matrix Card matching Audit-Management-System (13).png */}
-      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
-        <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
-          Role permission matrix
-        </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Summary of capabilities enforced for each role across the 6-stage audit lifecycle.
-        </p>
+      {/* ── SM-1/SM-4: Session Management Info ──────────────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-[16px] font-bold text-slate-900">Session management policy</h2>
+          <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">SM-1 · SM-2 · SM-4</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">IDLE TIMEOUT (SM-1)</div>
+            <div className="text-[22px] font-bold text-[#492785] mt-1">15 min</div>
+            <p className="text-[11px] text-slate-500 mt-1">Configurable in Settings → Security Policy. Session invalidated server-side on timeout.</p>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">ABSOLUTE TIMEOUT (SM-2)</div>
+            <div className="text-[22px] font-bold text-[#492785] mt-1">8 hours</div>
+            <p className="text-[11px] text-slate-500 mt-1">Force re-login after 8 h of continuous activity regardless of idle state.</p>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">CONCURRENT LOGINS (SM-4)</div>
+            <div className="text-[22px] font-bold text-[#492785] mt-1">Disallowed</div>
+            <p className="text-[11px] text-slate-500 mt-1">New login revokes all existing session tokens. One active session per user at all times.</p>
+          </div>
+        </div>
+        <div className="mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-800">
+          <strong>SM-3 (optional):</strong> A countdown dialog appears 2 minutes before idle timeout: "Your session will expire in 2 minutes. Click to stay logged in."
+          Session cookies issued with <code>Secure</code>, <code>HttpOnly</code>, and <code>SameSite=Strict</code> attributes.
+          Session ID regenerated after each successful login (session fixation prevention).
+        </div>
+      </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left border-collapse text-[13px]">
+      {/* ── Role permission matrix ───────────────────────────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5">
+        <h2 className="text-[16px] font-bold text-slate-900 mb-0.5">Role permission matrix</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Capabilities enforced per role across the 6-stage audit lifecycle. Permissions are assigned to roles — never directly to individual users (LAC-1 default-deny policy).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-[12px]">
             <thead>
-              <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 <th className="py-2.5 pr-4">CAPABILITY / LIFECYCLE STAGE</th>
                 <th className="py-2.5 px-4">SYSTEM ADMIN</th>
-                <th className="py-2.5 px-4">CHIEF AUDIT EXECUTIVE</th>
+                <th className="py-2.5 px-4">CAE</th>
                 <th className="py-2.5 px-4">AUDIT MANAGER</th>
                 <th className="py-2.5 px-4">AUDITOR</th>
                 <th className="py-2.5 pl-4">AUDITEE</th>
@@ -3057,14 +3472,12 @@ export const MasterDataSetupAccessView: React.FC<{
             <tbody className="divide-y divide-slate-200/80">
               {rolePermissionsMatrix.map((row) => (
                 <tr key={row.capability} className="hover:bg-slate-50/40">
-                  <td className="py-3 pr-4 font-bold text-slate-900">
-                    {row.capability}
-                  </td>
-                  <td className="py-3 px-4 text-xs text-slate-700">{row.sysAdmin}</td>
-                  <td className="py-3 px-4 text-xs text-slate-700">{row.cae}</td>
-                  <td className="py-3 px-4 text-xs text-slate-700">{row.manager}</td>
-                  <td className="py-3 px-4 text-xs text-slate-700">{row.auditor}</td>
-                  <td className="py-3 pl-4 text-xs text-slate-700">{row.auditee}</td>
+                  <td className="py-2.5 pr-4 font-bold text-slate-900">{row.capability}</td>
+                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.sysAdmin}</td>
+                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.cae}</td>
+                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.manager}</td>
+                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.auditor}</td>
+                  <td className="py-2.5 pl-4 text-xs text-slate-700">{row.auditee}</td>
                 </tr>
               ))}
             </tbody>

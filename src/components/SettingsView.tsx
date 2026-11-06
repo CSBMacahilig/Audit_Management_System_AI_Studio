@@ -1,4 +1,12 @@
 import React, { useState } from 'react';
+import {
+  DEFAULT_SECURITY_POLICY,
+  SecurityPolicy,
+  validatePasswordStrength,
+  scorePasswordStrength,
+  PASSWORD_STRENGTH_LABELS,
+  PASSWORD_STRENGTH_COLORS,
+} from '../utils/security';
 
 interface SettingsViewProps {
   frequencies: {
@@ -83,6 +91,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [med, setMed] = useState(frequencies.medium);
   const [low, setLow] = useState(frequencies.low);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+
+  // ── BSSC V3: Security Policy state (PM, IA, SM, EC, AL configurable settings) ──
+  const [secPolicy, setSecPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
+  const [secPolicyDraft, setSecPolicyDraft] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
+  const [secPolicySaved, setSecPolicySaved] = useState(false);
+  // PM-2 validation preview
+  const [pwValidationTest, setPwValidationTest] = useState('');
+  const [showPwTest, setShowPwTest] = useState(false);
 
   const [sizingRows, setSizingRows] = useState<EditableSizingRow[]>(DEFAULT_SIZING);
   const [defaultSizeByRisk, setDefaultSizeByRisk] = useState({
@@ -805,6 +821,220 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           >
             Remove sample data
           </button>
+        </div>
+      </div>
+
+      {/* ── Card 6: Security Policy (BSSC V3) ────────────────────────────── */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
+                Security policy
+              </h2>
+              <span className="text-[10px] font-bold bg-[#E4DDF8] text-[#492785] px-2 py-0.5 rounded-full">
+                BSSC V3 · OCISO
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Configurable security controls per the OCISO Baseline Security Standards Checklist V3.
+              Changes take effect on next user login. All policies enforce server-side.
+            </p>
+          </div>
+          {secPolicySaved && (
+            <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+              ✓ Security policy saved
+            </span>
+          )}
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* ── Password Management (PM) ─────────────────────────────── */}
+          <div className="space-y-4">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-[#492785] border-b border-[#492785]/20 pb-1">
+              Password Management (PM)
+            </div>
+            {[
+              { label: 'Min length — regular accounts (PM-1)', field: 'passwordMinLengthRegular' as keyof SecurityPolicy, min: 8, max: 64, note: 'BSSC minimum: 8' },
+              { label: 'Min length — privileged accounts (PM-1)', field: 'passwordMinLengthPrivileged' as keyof SecurityPolicy, min: 12, max: 64, note: 'BSSC minimum: 12' },
+              { label: 'Password history (last N passwords) (PM-5)', field: 'passwordHistoryCount' as keyof SecurityPolicy, min: 1, max: 24, note: 'BSSC minimum: 6' },
+              { label: 'Min password age (days) (PM-6)', field: 'passwordMinAgeDays' as keyof SecurityPolicy, min: 1, max: 30, note: 'BSSC: 1 day' },
+              { label: 'Max password age without MFA (days) (PM-7)', field: 'passwordMaxAgeDaysNoMfa' as keyof SecurityPolicy, min: 30, max: 365, note: 'BSSC: 180 days' },
+              { label: 'Max password age with MFA (days) (PM-7)', field: 'passwordMaxAgeDaysMfa' as keyof SecurityPolicy, min: 90, max: 730, note: 'BSSC: 365 days' },
+              { label: 'Expiry warning lead time (days) (PM-8)', field: 'passwordExpiryWarnDays' as keyof SecurityPolicy, min: 1, max: 60, note: 'Optional: 15 days' },
+            ].map(({ label, field, min, max, note }) => (
+              <div key={field}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-700 font-medium">{label}</label>
+                  <span className="text-[10px] text-slate-400">{note}</span>
+                </div>
+                <input
+                  type="number" min={min} max={max}
+                  value={secPolicyDraft[field] as number}
+                  onChange={(e) => setSecPolicyDraft((prev) => ({ ...prev, [field]: Math.max(min, Math.min(max, Number(e.target.value))) }))}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+                />
+              </div>
+            ))}
+
+            {/* PM-2: Password validation test ─────────────────────────── */}
+            <div>
+              <div className="text-xs font-medium text-slate-700 mb-1">PM-2: Test password complexity</div>
+              <div className="relative">
+                <input
+                  type={showPwTest ? 'text' : 'password'} autoComplete="new-password"
+                  value={pwValidationTest}
+                  onChange={(e) => setPwValidationTest(e.target.value)}
+                  placeholder="Type a password to validate…"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 pr-10"
+                />
+                <button type="button" onClick={() => setShowPwTest((p) => !p)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
+                  {showPwTest ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {pwValidationTest && (() => {
+                const score = scorePasswordStrength(pwValidationTest);
+                const { valid, violations } = validatePasswordStrength(pwValidationTest);
+                return (
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex gap-0.5">
+                      {[0,1,2,3,4].map((i) => (
+                        <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= score ? PASSWORD_STRENGTH_COLORS[score] : 'bg-slate-200'}`} />
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      PM-13 Strength: <strong className={valid ? 'text-emerald-700' : 'text-orange-700'}>{PASSWORD_STRENGTH_LABELS[score]}</strong>
+                      {' · '}
+                      {valid
+                        ? <span className="text-emerald-700 font-semibold">✓ Meets PM-1/PM-2 requirements</span>
+                        : <span className="text-red-700">{violations[0]}</span>
+                      }
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* ── Right column: IA / SM / EC / AL ──────────────────────── */}
+          <div className="space-y-4">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-[#492785] border-b border-[#492785]/20 pb-1">
+              Authentication, Session &amp; Logging (IA / SM / EC / AL)
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-700 font-medium">Max failed login attempts before lockout (IA-8)</label>
+                <span className="text-[10px] text-slate-400">BSSC: 3</span>
+              </div>
+              <input type="number" min={1} max={10}
+                value={secPolicyDraft.maxFailedLoginAttempts}
+                onChange={(e) => setSecPolicyDraft((prev) => ({ ...prev, maxFailedLoginAttempts: Math.max(1, Math.min(10, Number(e.target.value))) }))}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-700 font-medium">Idle session timeout (minutes) (SM-1)</label>
+                <span className="text-[10px] text-slate-400">BSSC: 15 min</span>
+              </div>
+              <input type="number" min={5} max={120}
+                value={secPolicyDraft.sessionTimeoutMinutes}
+                onChange={(e) => setSecPolicyDraft((prev) => ({ ...prev, sessionTimeoutMinutes: Math.max(5, Math.min(120, Number(e.target.value))) }))}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-700 font-medium">Absolute session timeout (hours) (SM-2)</label>
+                <span className="text-[10px] text-slate-400">Optional: 8 h</span>
+              </div>
+              <input type="number" min={1} max={24}
+                value={secPolicyDraft.absoluteSessionHours}
+                onChange={(e) => setSecPolicyDraft((prev) => ({ ...prev, absoluteSessionHours: Math.max(1, Math.min(24, Number(e.target.value))) }))}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+              />
+            </div>
+
+            {/* Toggle controls */}
+            <div className="space-y-2 pt-2">
+              {[
+                { label: 'MFA / 2FA enabled (IA-4)', field: 'mfaEnabled' as keyof SecurityPolicy, note: 'Required for Tier 1 & externally-facing systems' },
+                { label: 'TLS 1.2+ enforced / HTTPS only (EC-2 / IA-10)', field: 'tlsEnforced' as keyof SecurityPolicy, note: 'HSTS max-age ≥ 1 year required' },
+                { label: 'Audit logging enabled (AL-1)', field: 'auditLoggingEnabled' as keyof SecurityPolicy, note: 'SIEM & MSOC integration (AL-2/AL-3)' },
+              ].map(({ label, field, note }) => (
+                <div key={field} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-800">{label}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{note}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSecPolicyDraft((prev) => ({ ...prev, [field]: !(prev[field] as boolean) }))}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                      secPolicyDraft[field] ? 'bg-[#492785]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                      secPolicyDraft[field] ? 'translate-x-4' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* EC status panel */}
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1.5 text-[11px] text-blue-800">
+              <div className="font-bold text-blue-900">EC-1/EC-2: Encryption requirements</div>
+              <div>• <strong>Data at rest:</strong> AES-256 / TDE required (EC-1). Configure on database and storage layer.</div>
+              <div>• <strong>Data in transit:</strong> TLS 1.2+ only. TLS 1.0/1.1 disabled (EC-2).</div>
+              <div>• <strong>HSTS header:</strong> <code className="bg-white/60 px-1 rounded">Strict-Transport-Security: max-age=31536000; includeSubDomains; preload</code></div>
+              <div>• <strong>Key management:</strong> Use cloud KMS (AWS KMS / Azure Key Vault). Rotate keys periodically.</div>
+            </div>
+
+            {/* AL fields panel */}
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-1 text-[11px] text-purple-900">
+              <div className="font-bold mb-1">AL-4: Required audit log fields per event</div>
+              {['AL-4.1 Username','AL-4.2 Full Name (First · Middle · Last)','AL-4.3 Employee Number','AL-4.4 Last Login Date (ISO 8601)','AL-4.5 Account Modification Timestamp','AL-4.6 Account Change Log (creation, pw changes, status changes)','AL-4.7 Account Status (Active / Inactive / Deactivated)'].map((f) => (
+                <div key={f} className="flex items-center gap-1.5">
+                  <span className="text-emerald-600 font-bold">✓</span>
+                  <span>{f}</span>
+                </div>
+              ))}
+              <div className="mt-1.5 text-[10px] text-purple-700">
+                Log format: structured JSON (SIEM-compatible). Logs are append-only — application code cannot modify or delete entries. Retention: 1–3 years (confirm with OCISO).
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              setSecPolicy(secPolicyDraft);
+              setSecPolicySaved(true);
+              notify('BSSC V3 security policy saved and applied.');
+              setTimeout(() => setSecPolicySaved(false), 4000);
+            }}
+            className="px-4 py-2.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+          >
+            Save security policy
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSecPolicyDraft(DEFAULT_SECURITY_POLICY);
+              notify('Security policy restored to BSSC V3 defaults.');
+            }}
+            className="text-xs font-semibold text-slate-700 hover:text-slate-950 cursor-pointer"
+          >
+            Restore BSSC defaults
+          </button>
+          <div className="ml-auto text-[10px] text-slate-400">
+            Current policy: lockout={secPolicy.maxFailedLoginAttempts} attempts · session={secPolicy.sessionTimeoutMinutes} min · pw min={secPolicy.passwordMinLengthRegular} chars
+          </div>
         </div>
       </div>
 
