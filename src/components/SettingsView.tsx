@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DEFAULT_SECURITY_POLICY,
   SecurityPolicy,
@@ -7,6 +7,7 @@ import {
   PASSWORD_STRENGTH_LABELS,
   PASSWORD_STRENGTH_COLORS,
 } from '../utils/security';
+import { SizingConfig } from '../data/auditData';
 
 interface SettingsViewProps {
   frequencies: {
@@ -21,6 +22,7 @@ interface SettingsViewProps {
     medium: number;
     low: number;
   }) => void;
+  onSaveSizing?: (sizing: SizingConfig[]) => void;
 }
 
 interface EditableSizingRow {
@@ -85,6 +87,7 @@ const DEFAULT_SIZING: EditableSizingRow[] = [
 export const SettingsView: React.FC<SettingsViewProps> = ({
   frequencies,
   onSaveFrequencies,
+  onSaveSizing,
 }) => {
   const [crit, setCrit] = useState(frequencies.critical);
   const [high, setHigh] = useState(frequencies.high);
@@ -93,8 +96,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   // ── BSSC V3: Security Policy state (PM, IA, SM, EC, AL configurable settings) ──
-  const [secPolicy, setSecPolicy] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
-  const [secPolicyDraft, setSecPolicyDraft] = useState<SecurityPolicy>(DEFAULT_SECURITY_POLICY);
+  const [secPolicy, setSecPolicy] = useState<SecurityPolicy>(() => {
+    try {
+      const stored = localStorage.getItem('bssc_security_policy');
+      return stored ? JSON.parse(stored) : DEFAULT_SECURITY_POLICY;
+    } catch {
+      return DEFAULT_SECURITY_POLICY;
+    }
+  });
+  const [secPolicyDraft, setSecPolicyDraft] = useState<SecurityPolicy>(secPolicy);
   const [secPolicySaved, setSecPolicySaved] = useState(false);
   // PM-2 validation preview
   const [pwValidationTest, setPwValidationTest] = useState('');
@@ -568,7 +578,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="mt-5 flex items-center gap-4">
           <button
             type="button"
-            onClick={() => notify('Engagement sizing & standard hours saved.')}
+            onClick={() => {
+              if (onSaveSizing) {
+                const configs: SizingConfig[] = sizingRows.map((r) => ({
+                  id: r.id,
+                  sizeName: r.size,
+                  code: r.size.slice(0, 3).toUpperCase(),
+                  workingDays: r.durationWeeks * 5,
+                  calendarSpan: `${r.durationWeeks} weeks`,
+                  auditors: r.fieldTeam,
+                  hoursPerDay: 8,
+                  budgetedHours: r.standardHours,
+                  typicalUse: r.whenToUse,
+                }));
+                onSaveSizing(configs);
+              }
+              notify('Engagement sizing & standard hours saved to database.');
+            }}
             className="px-4 py-2.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
           >
             Save sizing
@@ -1015,6 +1041,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onClick={() => {
               setSecPolicy(secPolicyDraft);
               setSecPolicySaved(true);
+              try {
+                localStorage.setItem('bssc_security_policy', JSON.stringify(secPolicyDraft));
+              } catch {
+                // ignore
+              }
               notify('BSSC V3 security policy saved and applied.');
               setTimeout(() => setSecPolicySaved(false), 4000);
             }}
@@ -1026,6 +1057,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             type="button"
             onClick={() => {
               setSecPolicyDraft(DEFAULT_SECURITY_POLICY);
+              setSecPolicy(DEFAULT_SECURITY_POLICY);
+              try {
+                localStorage.removeItem('bssc_security_policy');
+              } catch {
+                // ignore
+              }
               notify('Security policy restored to BSSC V3 defaults.');
             }}
             className="text-xs font-semibold text-slate-700 hover:text-slate-950 cursor-pointer"

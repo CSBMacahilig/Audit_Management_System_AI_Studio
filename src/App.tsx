@@ -45,8 +45,14 @@ import {
   insertFile,
   insertActivityLog,
   saveFrequencies,
+  upsertUniverseEntity,
+  deleteUniverseEntity,
+  upsertUserProfile,
+  deleteUserProfile,
+  saveSizingConfigs,
   AuditFrequencies,
 } from './utils/db';
+import { SizingConfig } from './data/auditData';
 
 // Fallback profile used when user_profiles table is empty (fresh database)
 const FALLBACK_USER: UserProfile = {
@@ -140,6 +146,35 @@ export default function App() {
   const handleUpdateIssue = (issue: IssueRegisterItem) => {
     setIssues((prev) => prev.map((i) => i.id === issue.id ? issue : i));
     upsertIssue(issue);
+  };
+
+  const handleAddUniverseEntity = (entity: UniverseEntity) => {
+    setUniverse((prev) => [entity, ...prev]);
+    upsertUniverseEntity(entity);
+  };
+
+  const handleDeleteUniverseEntity = (id: string) => {
+    setUniverse((prev) => prev.filter((u) => u.id !== id));
+    deleteUniverseEntity(id);
+  };
+
+  const handleAddUserProfile = (profile: UserProfile) => {
+    setUserProfiles((prev) => [...prev, profile]);
+    upsertUserProfile(profile);
+  };
+
+  const handleUpdateUserProfile = (profile: UserProfile) => {
+    setUserProfiles((prev) => prev.map((p) => p.id === profile.id ? profile : p));
+    upsertUserProfile(profile);
+  };
+
+  const handleDeleteUserProfile = (id: string) => {
+    setUserProfiles((prev) => prev.filter((p) => p.id !== id));
+    deleteUserProfile(id);
+  };
+
+  const handleSaveSizing = (configs: SizingConfig[]) => {
+    saveSizingConfigs(configs);
   };
 
   // Navigation & Lifecycle Progress State
@@ -686,6 +721,8 @@ export default function App() {
             universeRecords={FULL_UNIVERSE_RECORDS}
             frequencies={frequencies}
             isReauditMode={activeLifecycleStage === 7}
+            onAddUniverseEntity={handleAddUniverseEntity}
+            onDeleteUniverseEntity={handleDeleteUniverseEntity}
           />
         )}
 
@@ -747,6 +784,7 @@ export default function App() {
           <SettingsView
             frequencies={frequencies}
             onSaveFrequencies={handleSaveFrequencies}
+            onSaveSizing={handleSaveSizing}
           />
         )}
 
@@ -761,6 +799,9 @@ export default function App() {
             accessActive={accessActive}
             onToggleAccess={() => setAccessActive((prev) => !prev)}
             onSelectTab={handleSelectTab}
+            onAddUserProfile={handleAddUserProfile}
+            onUpdateUserProfile={handleUpdateUserProfile}
+            onDeleteUserProfile={handleDeleteUserProfile}
           />
         )}
       </main>

@@ -475,8 +475,15 @@ export const AuditUniverseView: React.FC<{
   universeRecords: UniverseRecord[];
   frequencies: { critical: number; high: number; medium: number; low: number };
   isReauditMode?: boolean;
-}> = ({ frequencies, universeRecords }) => {
+  onAddUniverseEntity?: (entity: UniverseEntity) => void;
+  onDeleteUniverseEntity?: (id: string) => void;
+}> = ({ frequencies, universeRecords, onAddUniverseEntity, onDeleteUniverseEntity }) => {
   const [records, setRecords] = useState<UniverseRecord[]>(universeRecords);
+
+  React.useEffect(() => {
+    setRecords(universeRecords);
+  }, [universeRecords]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All types');
   const [riskFilter, setRiskFilter] = useState('All risk levels');
@@ -539,6 +546,25 @@ export const AuditUniverseView: React.FC<{
       nextDueStatus: 'On track',
     };
     setRecords((prev) => [added, ...prev]);
+
+    if (onAddUniverseEntity) {
+      onAddUniverseEntity({
+        id: added.id,
+        code: `UNV-${Date.now().toString().slice(-4)}`,
+        name: added.name,
+        division: added.subtitle,
+        category: added.type,
+        likelihood: added.likelihood,
+        impact: added.impact,
+        riskScore: added.riskScore,
+        riskLevel: added.riskLevel,
+        lastAudited: added.lastAudit,
+        nextDue: added.nextDue,
+        cycleMonths: added.cycleMonths,
+        defaultLead: added.owner,
+      });
+    }
+
     setNewName('');
     setShowAddModal(false);
   };
@@ -675,9 +701,12 @@ export const AuditUniverseView: React.FC<{
                   <td className="py-3.5 pl-4 text-right">
                     <button
                       type="button"
-                      onClick={() =>
-                        setRecords((prev) => prev.filter((item) => item.id !== rec.id))
-                      }
+                      onClick={() => {
+                        setRecords((prev) => prev.filter((item) => item.id !== rec.id));
+                        if (onDeleteUniverseEntity) {
+                          onDeleteUniverseEntity(rec.id);
+                        }
+                      }}
                       className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                     >
                       Remove
@@ -1268,6 +1297,11 @@ export const IssuesView: React.FC<{
   onValidateAndCloseFinding: (engagementId: string, findingId: string) => void;
 }> = ({ activeLifecycleStage, onValidateAndCloseFinding, issues: initialIssues, onUpdateIssue }) => {
   const [issues, setIssues] = useState<IssueRegisterItem[]>(initialIssues);
+
+  React.useEffect(() => {
+    setIssues(initialIssues);
+  }, [initialIssues]);
+
   const [filterTab, setFilterTab] = useState<string>(
     activeLifecycleStage === 6 ? 'For validation' : 'Open'
   );
@@ -1290,42 +1324,38 @@ export const IssuesView: React.FC<{
   });
 
   const handleValidateClose = (issue: IssueRegisterItem) => {
+    const updated: IssueRegisterItem = {
+      ...issue,
+      status: 'Closed',
+      isOverdue: false,
+      isDueSoon: false,
+      daysStatus: 'Closed 4 Oct 2026',
+      evidenceNote:
+        closureRemarks.trim() ||
+        'Validated remediation evidence & closed by Internal Audit.',
+    };
     setIssues((prev) =>
-      prev.map((item) =>
-        item.id === issue.id
-          ? {
-              ...item,
-              status: 'Closed',
-              isOverdue: false,
-              isDueSoon: false,
-              daysStatus: 'Closed 4 Oct 2026',
-              evidenceNote:
-                closureRemarks.trim() ||
-                'Validated remediation evidence & closed by Internal Audit.',
-            }
-          : item
-      )
+      prev.map((item) => (item.id === issue.id ? updated : item))
     );
+    onUpdateIssue(updated);
     onValidateAndCloseFinding('aud-2026-006', 'fnd-001');
     setClosureRemarks('');
     setSelectedIssue(null);
   };
 
   const handleGrantExtension = (issue: IssueRegisterItem) => {
+    const updated: IssueRegisterItem = {
+      ...issue,
+      currentDue: extensionDate,
+      extensionCount: issue.extensionCount + 1,
+      isOverdue: false,
+      daysStatus: `Extended to ${extensionDate}`,
+      status: 'In progress',
+    };
     setIssues((prev) =>
-      prev.map((item) =>
-        item.id === issue.id
-          ? {
-              ...item,
-              currentDue: extensionDate,
-              extensionCount: item.extensionCount + 1,
-              isOverdue: false,
-              daysStatus: `Extended to ${extensionDate}`,
-              status: 'In progress',
-            }
-          : item
-      )
+      prev.map((item) => (item.id === issue.id ? updated : item))
     );
+    onUpdateIssue(updated);
     setSelectedIssue(null);
   };
 
@@ -1643,7 +1673,21 @@ export const MasterDataSetupAccessView: React.FC<{
   accessActive?: boolean;
   onToggleAccess?: () => void;
   onSelectTab?: (tab: MainTabId) => void;
-}> = ({ tab, currentUser, onChangeUser, userProfiles, accessActive, onToggleAccess, onSelectTab }) => {
+  onAddUserProfile?: (user: UserProfile) => void;
+  onUpdateUserProfile?: (user: UserProfile) => void;
+  onDeleteUserProfile?: (id: string) => void;
+}> = ({
+  tab,
+  currentUser,
+  onChangeUser,
+  userProfiles,
+  accessActive,
+  onToggleAccess,
+  onSelectTab,
+  onAddUserProfile,
+  onUpdateUserProfile,
+  onDeleteUserProfile,
+}) => {
   // Master data state matching Audit-Management-System (4).png & (6).png
   const [entityTypes, setEntityTypes] = useState([
     'Department',
@@ -2959,6 +3003,26 @@ export const MasterDataSetupAccessView: React.FC<{
       isPrivileged: newUserRole === 'System administrator',
     };
     setAccessUsers((prev) => [...prev, newAcc as any]);
+    if (onAddUserProfile) {
+      onAddUserProfile({
+        id: newAcc.id,
+        name: newAcc.name,
+        roleTitle: `${newUserRole} (Internal Audit)`,
+        fullLabel: `${newAcc.name} – ${newUserRole}`,
+        headerSubtitle: newUserRole,
+        department: 'Internal Audit',
+        canApproveHead: newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator',
+        canApproveIndependent: newUserRole === 'Audit Manager' || newUserRole === 'Auditor',
+        canApproveCAE: newUserRole === 'Chief Audit Executive',
+        employeeNumber: newAcc.employeeNumber,
+        accountStatus: 'Active',
+        failedLoginCount: 0,
+        isLocked: false,
+        requiresPasswordChange: true,
+        mfaEnabled: false,
+        isPrivileged: newUserRole === 'System administrator',
+      });
+    }
     notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created. Temporary password issued. Password change required on first login.`);
     // Reset form
     setNewUserName(''); setNewUserEmail(''); setNewUserEmployeeNo('');
@@ -3324,12 +3388,39 @@ export const MasterDataSetupAccessView: React.FC<{
                           Reset PW
                         </button>
                         <button type="button"
-                          onClick={() => setAccessUsers((prev) => prev.map((item) => item.id === usr.id ? { ...item, status: item.status === 'Active' ? 'Suspended' : 'Active' } as any : item))}
+                          onClick={() => {
+                            setAccessUsers((prev) =>
+                              prev.map((item) => {
+                                if (item.id !== usr.id) return item;
+                                const nextStatus = item.status === 'Active' ? 'Suspended' : 'Active';
+                                if (onUpdateUserProfile) {
+                                  onUpdateUserProfile({
+                                    id: usr.id,
+                                    name: usr.name,
+                                    roleTitle: usr.title,
+                                    fullLabel: `${usr.name} — ${usr.roles.join(', ')}`,
+                                    headerSubtitle: usr.roles.join(', '),
+                                    department: 'Internal Audit',
+                                    canApproveHead: usr.roles.includes('Chief Audit Executive'),
+                                    canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'),
+                                    canApproveCAE: usr.roles.includes('Chief Audit Executive'),
+                                    accountStatus: nextStatus === 'Active' ? 'Active' : 'Inactive',
+                                  });
+                                }
+                                return { ...item, status: nextStatus } as any;
+                              })
+                            );
+                          }}
                           className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
                           {usr.status === 'Active' ? 'Suspend' : 'Activate'}
                         </button>
                         <button type="button"
-                          onClick={() => setAccessUsers((prev) => prev.filter((item) => item.id !== usr.id))}
+                          onClick={() => {
+                            setAccessUsers((prev) => prev.filter((item) => item.id !== usr.id));
+                            if (onDeleteUserProfile) {
+                              onDeleteUserProfile(usr.id);
+                            }
+                          }}
                           className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-medium cursor-pointer">
                           Remove
                         </button>

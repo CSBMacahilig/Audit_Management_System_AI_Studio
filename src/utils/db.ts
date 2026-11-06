@@ -429,6 +429,11 @@ export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void
   if (error) console.error('upsertUniverseEntity:', error.message);
 }
 
+export async function deleteUniverseEntity(id: string): Promise<void> {
+  const { error } = await supabase.from('universe_entities').delete().eq('id', id);
+  if (error) console.error('deleteUniverseEntity:', error.message);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sizing configs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -455,6 +460,12 @@ export async function upsertSizingConfig(cfg: SizingConfig): Promise<void> {
   if (error) console.error('upsertSizingConfig:', error.message);
 }
 
+export async function saveSizingConfigs(configs: SizingConfig[]): Promise<void> {
+  for (const cfg of configs) {
+    await upsertSizingConfig(cfg);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // User profiles
 // ─────────────────────────────────────────────────────────────────────────────
@@ -463,6 +474,38 @@ export async function fetchUserProfiles(): Promise<UserProfile[]> {
   const { data, error } = await supabase.from('user_profiles').select('*').order('employee_number');
   if (error) { console.error('fetchUserProfiles:', error.message); return []; }
   return (data ?? []).map(rowToUserProfile);
+}
+
+export async function upsertUserProfile(u: UserProfile): Promise<void> {
+  const { error } = await supabase.from('user_profiles').upsert({
+    id: u.id,
+    name: u.name,
+    role_title: u.roleTitle,
+    full_label: u.fullLabel,
+    header_subtitle: u.headerSubtitle,
+    department: u.department,
+    can_approve_head: u.canApproveHead,
+    can_approve_independent: u.canApproveIndependent,
+    can_approve_cae: u.canApproveCAE,
+    employee_number: u.employeeNumber ?? null,
+    last_login_date: u.lastLoginDate ?? null,
+    account_modified_at: u.accountModifiedAt ?? null,
+    account_status: u.accountStatus ?? 'Active',
+    failed_login_count: u.failedLoginCount ?? 0,
+    is_locked: u.isLocked ?? false,
+    requires_password_change: u.requiresPasswordChange ?? false,
+    password_last_changed: u.passwordLastChanged ?? null,
+    password_history: u.passwordHistory ?? [],
+    mfa_enabled: u.mfaEnabled ?? false,
+    is_privileged: u.isPrivileged ?? false,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) console.error('upsertUserProfile:', error.message);
+}
+
+export async function deleteUserProfile(id: string): Promise<void> {
+  const { error } = await supabase.from('user_profiles').delete().eq('id', id);
+  if (error) console.error('deleteUserProfile:', error.message);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
