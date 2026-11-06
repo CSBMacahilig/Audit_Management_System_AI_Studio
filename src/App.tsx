@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AuditEngagement,
   AuditFile,
@@ -24,8 +24,45 @@ import {
   OverviewView,
   TimelineView,
 } from './components/AdditionalViews';
+import { LoginPage, ForcePasswordChange } from './components/LoginPage';
+import { AdminUserManagement } from './components/AdminUserManagement';
+import {
+  AuthSession,
+  loadSession,
+  logout,
+  seedDefaultAdmin,
+} from './utils/authStore';
 
 export default function App() {
+  // ── Auth state ────────────────────────────────────────────────────────────
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  // Seed the default admin account (idempotent) and restore any existing session
+  useEffect(() => {
+    seedDefaultAdmin().then(() => {
+      const existing = loadSession();
+      setAuthSession(existing);
+      setAuthReady(true);
+    });
+  }, []);
+
+  const handleLoginSuccess = (session: AuthSession) => {
+    setAuthSession(session);
+  };
+
+  const handleLogout = () => {
+    logout();
+    setAuthSession(null);
+    setShowAdminPanel(false);
+  };
+
+  const handlePasswordChanged = (updatedSession: AuthSession) => {
+    setAuthSession(updatedSession);
+  };
+
+  // ── Audit app state ───────────────────────────────────────────────────────
   const [engagements, setEngagements] = useState<AuditEngagement[]>(INITIAL_ENGAGEMENTS);
   const [universe] = useState<UniverseEntity[]>(INITIAL_UNIVERSE);
   const [currentUser, setCurrentUser] = useState<UserProfile>(USERS[0]);
@@ -71,13 +108,11 @@ export default function App() {
       case 'master-data':
       case 'setup':
       case 'access':
-        // Preserve current lifecycle context or default to 1 (Planning & risk config)
         setActiveLifecycleStage(1);
         break;
     }
   };
 
-  // Synchronize Lifecycle Stage Breadcrumb click with Main Tab & Engagement Sub-Tab
   const handleSelectLifecycleStage = (stageId: LifecycleStageId) => {
     setActiveLifecycleStage(stageId);
 
@@ -95,7 +130,6 @@ export default function App() {
       case 3:
         setActiveTab('fieldwork');
         if (!selectedEngagementId) {
-          // Open the primary reporting engagement AUD-2026-006 to show Findings & Report
           setSelectedEngagementId('aud-2026-006');
         }
         setActiveSubTab('findings');
@@ -119,7 +153,6 @@ export default function App() {
     }
   };
 
-  // Synchronize Engagement Sub-Tab selection with Lifecycle Stage Breadcrumbs
   const handleSelectSubTab = (subTab: EngagementSubTabId) => {
     setActiveSubTab(subTab);
     if (subTab === 'working-notes' || subTab === 'review' || subTab === 'files') {
@@ -470,8 +503,44 @@ export default function App() {
     setEngagements((prev) => [...prev, drafted]);
   };
 
+  // ── Auth gates ────────────────────────────────────────────────────────────
+
+  // Waiting for seedDefaultAdmin to complete
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#E8E2F4] flex items-center justify-center">
+        <div className="text-slate-500 text-sm animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+
+  // Not logged in → show login page
+  if (!authSession) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // PM-3: Logged in but must change password first
+  if (authSession.requiresPasswordChange) {
+    return (
+      <ForcePasswordChange
+        session={authSession}
+        onChanged={handlePasswordChanged}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // ── Authenticated app ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#E8E2F4] text-slate-900 pb-16">
+      {/* Admin user management modal */}
+      {showAdminPanel && authSession.role === 'admin' && (
+        <AdminUserManagement
+          session={authSession}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
       <HeaderAndLifecycle
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
@@ -488,6 +557,10 @@ export default function App() {
         onToggleAccess={() => setAccessActive((prev) => !prev)}
         selectedEngagement={activeTab === 'fieldwork' ? selectedEngagement : null}
         onAdvanceEngagementStage={handleAdvanceEngagementStage}
+        // Auth props
+        authSession={authSession}
+        onLogout={handleLogout}
+        onOpenAdminPanel={() => setShowAdminPanel(true)}
       />
 
       <main className="w-full max-w-[1220px] mx-auto px-4 sm:px-6 mt-2">

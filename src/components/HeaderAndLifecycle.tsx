@@ -8,6 +8,7 @@ import {
   AuditEngagement,
 } from '../data/auditData';
 import { Check } from 'lucide-react';
+import { AuthSession } from '../utils/authStore';
 
 interface HeaderAndLifecycleProps {
   activeTab: MainTabId;
@@ -21,6 +22,10 @@ interface HeaderAndLifecycleProps {
   onToggleAccess: () => void;
   selectedEngagement: AuditEngagement | null;
   onAdvanceEngagementStage?: (stageId: LifecycleStageId) => void;
+  // Auth
+  authSession?: AuthSession | null;
+  onLogout?: () => void;
+  onOpenAdminPanel?: () => void;
 }
 
 const MAIN_TABS: { id: MainTabId; label: string }[] = [
@@ -45,6 +50,9 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   onChangeUser,
   accessActive,
   onToggleAccess,
+  authSession,
+  onLogout,
+  onOpenAdminPanel,
 }) => {
   const [showUserMenu, setShowUserMenu] = React.useState(false);
 
@@ -82,6 +90,49 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
               Planning · Fieldwork · Reporting · Issue monitoring and closure
             </p>
           </div>
+
+          {/* Auth session pill — pushed to the right */}
+          {authSession && (
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {/* Signed-in user badge */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                <div className="w-6 h-6 rounded-full bg-[#492785] flex items-center justify-center text-white text-[10px] font-bold select-none">
+                  {authSession.fullName.charAt(0).toUpperCase()}
+                </div>
+                <div className="leading-tight">
+                  <div className="text-[12px] font-bold text-slate-900">{authSession.fullName}</div>
+                  <div className="text-[10px] text-slate-500">
+                    @{authSession.username} ·{' '}
+                    <span className={`font-semibold ${authSession.role === 'admin' ? 'text-[#492785]' : 'text-slate-600'}`}>
+                      {authSession.role}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin panel button — only shown to admins */}
+              {authSession.role === 'admin' && onOpenAdminPanel && (
+                <button
+                  type="button"
+                  onClick={onOpenAdminPanel}
+                  className="px-3 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md border border-[#492785] shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Manage users
+                </button>
+              )}
+
+              {/* Logout */}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="px-3 py-1.5 bg-white hover:bg-red-50 text-slate-700 hover:text-red-700 text-xs font-semibold rounded-md border border-slate-300 hover:border-red-200 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Simulated Access & User Switcher Row */}
@@ -127,7 +178,7 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
                 onClick={() => setShowUserMenu((prev) => !prev)}
                 className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
               >
-                Switch user
+                Switch audit role
               </button>
 
               {showUserMenu && (
