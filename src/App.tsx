@@ -44,6 +44,26 @@ import {
   AuditFrequencies,
 } from './utils/db';
 
+// Fallback profile used when user_profiles table is empty (fresh database)
+const FALLBACK_USER: UserProfile = {
+  id: 'system',
+  name: 'System User',
+  roleTitle: 'Internal Auditor',
+  fullLabel: 'System User – Internal Auditor',
+  headerSubtitle: 'Internal Auditor',
+  department: 'Internal Audit',
+  canApproveHead: false,
+  canApproveIndependent: false,
+  canApproveCAE: false,
+  accountStatus: 'Active',
+  failedLoginCount: 0,
+  isLocked: false,
+  requiresPasswordChange: false,
+  passwordHistory: [],
+  mfaEnabled: false,
+  isPrivileged: false,
+};
+
 export default function App() {
   // ── Auth state ────────────────────────────────────────────────────────────
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
@@ -101,8 +121,11 @@ export default function App() {
       setEngagements(engs);
       setUniverse(uni);
       setUserProfiles(profiles);
-      setCurrentUser(profiles[0] ?? null);
+      setCurrentUser(profiles[0] ?? FALLBACK_USER);
       setFrequenciesState(freq);
+    }).catch((err) => {
+      console.error('Failed to load data from Supabase:', err);
+    }).finally(() => {
       setDataLoading(false);
     });
   }, [authSession]);
