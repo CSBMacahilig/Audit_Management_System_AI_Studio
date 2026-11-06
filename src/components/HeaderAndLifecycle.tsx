@@ -1,0 +1,227 @@
+import React from 'react';
+import {
+  LIFECYCLE_STAGES,
+  LifecycleStageId,
+  MainTabId,
+  UserProfile,
+  USERS,
+  AuditEngagement,
+} from '../data/auditData';
+import { Check } from 'lucide-react';
+
+interface HeaderAndLifecycleProps {
+  activeTab: MainTabId;
+  onSelectTab: (tab: MainTabId) => void;
+  activeLifecycleStage: LifecycleStageId;
+  maxCompletedStage: number;
+  onSelectLifecycleStage: (stageId: LifecycleStageId) => void;
+  currentUser: UserProfile;
+  onChangeUser: (user: UserProfile) => void;
+  accessActive: boolean;
+  onToggleAccess: () => void;
+  selectedEngagement: AuditEngagement | null;
+  onAdvanceEngagementStage?: (stageId: LifecycleStageId) => void;
+}
+
+const MAIN_TABS: { id: MainTabId; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'universe', label: 'Audit universe' },
+  { id: 'annual-plan', label: 'Annual plan' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'fieldwork', label: 'Fieldwork' },
+  { id: 'issues', label: 'Issues' },
+  { id: 'master-data', label: 'Master data' },
+  { id: 'settings', label: 'Settings' },
+  { id: 'setup', label: 'Setup' },
+  { id: 'access', label: 'Access' },
+];
+
+export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
+  activeTab,
+  onSelectTab,
+  activeLifecycleStage,
+  onSelectLifecycleStage,
+  currentUser,
+  onChangeUser,
+  accessActive,
+  onToggleAccess,
+}) => {
+  const [showUserMenu, setShowUserMenu] = React.useState(false);
+
+  return (
+    <div className="w-full max-w-[1220px] mx-auto pt-6 pb-3 px-4 sm:px-6">
+      {/* Top Brand & Institution Header */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-5">
+          {/* CitySavings Bank Logo Box */}
+          <div className="bg-white rounded-md px-4 py-2.5 shadow-2xs border border-[#542D84]/10 flex items-center shrink-0 select-none">
+            <div className="relative flex items-baseline tracking-tight leading-none pt-1">
+              <span className="text-[#F37021] font-serif font-bold text-[24px] tracking-tight">
+                City
+              </span>
+              <div className="relative inline-flex flex-col">
+                <span className="text-[6.5px] font-bold tracking-wider uppercase text-[#512B81] -mb-1 ml-0.5">
+                  a UNIONBANK subsidiary
+                </span>
+                <span className="text-[#512B81] font-serif font-bold text-[24px] tracking-tight">
+                  Savings
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Title & Division */}
+          <div className="flex flex-col">
+            <span className="text-[11px] font-semibold tracking-[0.12em] text-slate-600 uppercase">
+              CSB · INTERNAL AUDIT DIVISION
+            </span>
+            <h1 className="text-[26px] sm:text-[28px] font-bold text-slate-900 tracking-tight leading-tight mt-0.5">
+              Audit Management System
+            </h1>
+            <p className="text-[13.5px] text-slate-600 mt-0.5">
+              Planning · Fieldwork · Reporting · Issue monitoring and closure
+            </p>
+          </div>
+        </div>
+
+        {/* Simulated Access & User Switcher Row */}
+        <div className="flex flex-wrap items-center gap-4 pt-0.5">
+          <div className="flex items-center">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                accessActive
+                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  : 'bg-[#F8E7D2] text-[#A64B00]'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  accessActive ? 'bg-emerald-700' : 'bg-[#D96B12]'
+                }`}
+              />
+              {accessActive ? 'Access enforced' : 'Access simulated'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="text-right leading-tight">
+              <div className="text-[13px] font-bold text-slate-900">
+                {currentUser.name}
+              </div>
+              <div className="text-[11.5px] text-slate-600">
+                {currentUser.headerSubtitle}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onToggleAccess}
+              className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+            >
+              {accessActive ? 'Simulate access' : 'Activate access'}
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUserMenu((prev) => !prev)}
+                className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Switch user
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-slate-200 py-1.5 z-50">
+                  <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Select Active Audit Role
+                  </div>
+                  {USERS.map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        onChangeUser(u);
+                        setShowUserMenu(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50/70 transition-colors cursor-pointer ${
+                        u.id === currentUser.id
+                          ? 'bg-purple-50/90 font-semibold text-[#542D84]'
+                          : 'text-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold text-slate-900">{u.name}</div>
+                        <div className="text-[11px] text-slate-500">{u.roleTitle}</div>
+                      </div>
+                      {u.id === currentUser.id && (
+                        <Check className="w-3.5 h-3.5 text-[#542D84] shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7-Stage Audit Lifecycle Breadcrumbs Bar */}
+      <div className="mt-4 bg-[#E5DFF0] rounded-lg border border-slate-300/80 overflow-hidden shadow-2xs">
+        <nav
+          aria-label="Audit Lifecycle Stages"
+          className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 divide-y sm:divide-y-0 sm:divide-x divide-slate-300/75"
+        >
+          {LIFECYCLE_STAGES.map((stage) => {
+            const isCurrent = stage.id === activeLifecycleStage;
+            return (
+              <button
+                key={stage.id}
+                type="button"
+                onClick={() => onSelectLifecycleStage(stage.id)}
+                className={`group relative text-left px-3.5 py-2.5 transition-all cursor-pointer flex flex-col justify-start min-h-[76px] ${
+                  isCurrent
+                    ? 'bg-[#EFEBF7]'
+                    : 'bg-[#E8E2F3] hover:bg-[#EFEBF7]'
+                }`}
+              >
+                <div className="font-mono-tabular text-[11px] text-[#542D84] font-medium">
+                  {stage.code}
+                </div>
+                <div className="text-[13px] font-bold text-[#492785] leading-snug mt-0.5">
+                  {stage.title}
+                </div>
+                <div className="text-[11.5px] text-slate-600 leading-tight mt-0.5">
+                  {stage.subtitle}
+                </div>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Main CitySavings Golden-Orange Navigation Bar */}
+      <div className="mt-3.5 bg-[#F7A81B] rounded-lg px-2 sm:px-4 shadow-2xs flex items-center overflow-x-auto no-scrollbar">
+        {MAIN_TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onSelectTab(tab.id)}
+              className={`relative px-3.5 py-3 text-[13.5px] whitespace-nowrap transition-colors cursor-pointer select-none ${
+                isActive
+                  ? 'font-bold text-slate-950'
+                  : 'font-medium text-slate-900 hover:text-slate-950 hover:bg-black/5'
+              }`}
+            >
+              {tab.label}
+              {isActive && (
+                <span className="absolute bottom-0 left-2 right-2 h-[3px] bg-[#492785] rounded-t-xs" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
