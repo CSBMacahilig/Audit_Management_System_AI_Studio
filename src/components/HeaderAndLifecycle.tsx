@@ -76,7 +76,7 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
               CSB · INTERNAL AUDIT DIVISION
             </span>
             <h1 className="text-[26px] sm:text-[28px] font-bold text-slate-900 tracking-tight leading-tight mt-0.5">
-              Audit Management System
+              Audit Management - System
             </h1>
             <p className="text-[13.5px] text-slate-600 mt-0.5">
               Planning · Fieldwork · Reporting · Issue monitoring and closure
