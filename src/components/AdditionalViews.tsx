@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchMasterData, saveMasterData } from '../utils/db';
 import {
   AuditEngagement,
   IssueRegisterItem,
@@ -1361,6 +1362,640 @@ export const IssuesView: React.FC<{
 };
 
 // 5. MASTER DATA, SETUP, AND ACCESS VIEWS
+export interface AuditorRecord {
+  name: string;
+  role: string;
+  email: string;
+  skills: string;
+}
+
+export interface AuditeeUnitRecord {
+  unit: string;
+  head: string;
+  title: string;
+  email: string;
+}
+
+const DEFAULT_ENTITY_TYPES = [
+  'Department',
+  'Branch',
+  'Product / process',
+  'IT system',
+  'Vendor',
+];
+
+const DEFAULT_AUDIT_CATEGORIES = [
+  'Operations',
+  'Credit review',
+  'IT audit',
+  'Information security',
+  'Compliance',
+  'Financial',
+  'Branch audit',
+];
+
+const DEFAULT_AUDITORS: AuditorRecord[] = [
+  {
+    name: 'M. Santos',
+    role: 'Chief Audit Executive',
+    email: 'm.santos@bank.com.ph',
+    skills: 'Operations, Credit review, IT audit, Information security, Compliance, Financial, Branch audit',
+  },
+  {
+    name: 'J. Dela Cruz',
+    role: 'IT Audit Manager',
+    email: 'j.delacruz@bank.com.ph',
+    skills: 'IT audit, Information security',
+  },
+  {
+    name: 'A. Villanueva',
+    role: 'Senior Operations Auditor',
+    email: 'a.villanueva@bank.com.ph',
+    skills: 'Operations, Financial, Branch audit',
+  },
+  {
+    name: 'P. Mendoza',
+    role: 'IT & InfoSec Auditor',
+    email: 'p.mendoza@bank.com.ph',
+    skills: 'IT audit, Information security',
+  },
+  {
+    name: 'K. Lim',
+    role: 'Compliance & Branch Auditor',
+    email: 'k.lim@bank.com.ph',
+    skills: 'Compliance, Branch audit, Operations',
+  },
+  {
+    name: 'D. Ramos',
+    role: 'Credit Review Specialist',
+    email: 'd.ramos@bank.com.ph',
+    skills: 'Credit review, Financial',
+  },
+  {
+    name: 'B. Tolentino',
+    role: 'IT Systems Auditor',
+    email: 'b.tolentino@bank.com.ph',
+    skills: 'IT audit, Operations',
+  },
+  {
+    name: 'R. Garcia',
+    role: 'Operations & Financial Auditor',
+    email: 'r.garcia@bank.com.ph',
+    skills: 'Operations, Financial, Compliance',
+  },
+  {
+    name: 'L. Fernandez',
+    role: 'Branch & Compliance Auditor',
+    email: 'l.fernandez@bank.com.ph',
+    skills: 'Branch audit, Compliance, Credit review',
+  },
+];
+
+const DEFAULT_AUDITEE_DIRECTORY: AuditeeUnitRecord[] = [
+  {
+    unit: 'Operations · Cash & clearing',
+    head: 'R. Bautista',
+    title: 'VP, Operations',
+    email: 'r.bautista@bank.com.ph',
+  },
+  {
+    unit: 'Operations · Billing & collection',
+    head: 'R. Bautista',
+    title: 'VP, Operations',
+    email: 'r.bautista@bank.com.ph',
+  },
+  {
+    unit: 'Operations · Records & Collateral',
+    head: 'R. Bautista',
+    title: 'VP, Operations',
+    email: 'r.bautista@bank.com.ph',
+  },
+  {
+    unit: 'Loan Release & Disbursement · Card ops',
+    head: 'G. Soriano',
+    title: 'AVP, Loan Release & Cards',
+    email: 'g.soriano@bank.com.ph',
+  },
+  {
+    unit: 'IT · Core banking (Temenos T24)',
+    head: 'E. Navarro',
+    title: 'VP, Chief Information Officer',
+    email: 'e.navarro@bank.com.ph',
+  },
+  {
+    unit: 'IT · Digital channels',
+    head: 'E. Navarro',
+    title: 'VP, Chief Information Officer',
+    email: 'e.navarro@bank.com.ph',
+  },
+  {
+    unit: 'IT · Payment switches',
+    head: 'E. Navarro',
+    title: 'VP, Chief Information Officer',
+    email: 'e.navarro@bank.com.ph',
+  },
+  {
+    unit: 'IT · Network & Infrastructure Security',
+    head: 'E. Navarro',
+    title: 'VP, Chief Information Officer',
+    email: 'e.navarro@bank.com.ph',
+  },
+  {
+    unit: 'IT & Operations · Mission-Critical Systems',
+    head: 'E. Navarro',
+    title: 'VP, Chief Information Officer',
+    email: 'e.navarro@bank.com.ph',
+  },
+  {
+    unit: 'Lending · Salary loans',
+    head: 'V. Pascual',
+    title: 'VP, Consumer & Teacher Lending',
+    email: 'v.pascual@bank.com.ph',
+  },
+  {
+    unit: 'Lending · Product governance',
+    head: 'V. Pascual',
+    title: 'VP, Consumer & Teacher Lending',
+    email: 'v.pascual@bank.com.ph',
+  },
+  {
+    unit: 'Lending · Key Regional Hub',
+    head: 'V. Pascual',
+    title: 'VP, Consumer & Teacher Lending',
+    email: 'v.pascual@bank.com.ph',
+  },
+  {
+    unit: 'Compliance · AML / CFT',
+    head: 'C. Dizon',
+    title: 'Chief Compliance Officer',
+    email: 'c.dizon@bank.com.ph',
+  },
+  {
+    unit: 'Legal & Compliance · Accreditation',
+    head: 'C. Dizon',
+    title: 'Chief Compliance Officer',
+    email: 'c.dizon@bank.com.ph',
+  },
+  {
+    unit: 'Vendor Management & IT · Compliance',
+    head: 'C. Dizon',
+    title: 'Chief Compliance Officer',
+    email: 'c.dizon@bank.com.ph',
+  },
+  {
+    unit: 'Treasury · Liquidity',
+    head: 'L. Mercado',
+    title: 'VP, Treasurer',
+    email: 'l.mercado@bank.com.ph',
+  },
+  {
+    unit: 'Finance · General Ledger',
+    head: 'L. Mercado',
+    title: 'VP, Treasurer',
+    email: 'l.mercado@bank.com.ph',
+  },
+  {
+    unit: 'Branch Banking · Mindanao Region',
+    head: 'G. Soriano',
+    title: 'VP, Branch Banking',
+    email: 'g.soriano@bank.com.ph',
+  },
+  {
+    unit: 'Branch Banking · Visayas Region',
+    head: 'G. Soriano',
+    title: 'VP, Branch Banking',
+    email: 'g.soriano@bank.com.ph',
+  },
+  {
+    unit: 'Administrative Services · General services',
+    head: 'M. Ocampo',
+    title: 'AVP, Administrative Services',
+    email: 'm.ocampo@bank.com.ph',
+  },
+];
+
+const DEFAULT_SETUP_ITEMS = [
+  {
+    id: 'ob-1',
+    group: '1. Organization & branding',
+    stepNum: 1,
+    title: 'Organization name, unit & report header',
+    description:
+      'Set the institution name, internal audit department title, address, and confidentiality banner printed on all Word (.docx) memos and reports.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: 'City Savings Bank · Internal Audit Division',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'settings' as MainTabId,
+  },
+  {
+    id: 'ob-2',
+    group: '1. Organization & branding',
+    stepNum: 2,
+    title: 'Planning horizon & active audit year',
+    description:
+      'Confirm the multi-year planning window (default 2026–2028) and the active plan year shown on the Overview and Annual Plan.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: 'Active plan year: 2026 (3-year horizon)',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'annual-plan' as MainTabId,
+  },
+  {
+    id: 'am-1',
+    group: '2. Audit methodology & risk scoring',
+    stepNum: 3,
+    title: 'Inherent risk matrix (Likelihood × Impact)',
+    description:
+      'Review the 5×5 scoring thresholds (Critical ≥ 16, High ≥ 10, Medium ≥ 5, Low < 5) and risk rating definitions.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '5×5 matrix · 4 risk tiers configured',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'universe' as MainTabId,
+  },
+  {
+    id: 'am-2',
+    group: '2. Audit methodology & risk scoring',
+    stepNum: 4,
+    title: 'Risk-based audit cycle frequencies',
+    description:
+      'Set how many months may elapse before an entity becomes due for re-audit based on its inherent risk rating.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: 'Critical 6m · High 12m · Medium 24m · Low 36m',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'settings' as MainTabId,
+  },
+  {
+    id: 'am-3',
+    group: '2. Audit methodology & risk scoring',
+    stepNum: 5,
+    title: 'Engagement sizing, hours & capacity defaults',
+    description:
+      'Configure working days, calendar span, team size, and budgeted hours per engagement size (Small, Medium, Large, Extra-large) plus annual auditor capacity.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '8 h/day · 220 days/auditor/yr (1,760 h)',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'settings' as MainTabId,
+  },
+  {
+    id: 'md-1',
+    group: '3. Master data & directories',
+    stepNum: 6,
+    title: 'Entity types & audit categories',
+    description:
+      'Define the classification lists used in the Audit Universe and Annual Plan (e.g., Department, Branch, Product / process, IT system, Vendor; Operations, Credit review, IT audit, etc.).',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '5 entity types · 7 audit categories',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'master-data' as MainTabId,
+  },
+  {
+    id: 'md-2',
+    group: '3. Master data & directories',
+    stepNum: 7,
+    title: 'Internal Audit team & specialisations',
+    description:
+      'Register all internal auditors, their roles, email addresses, and category specialisations so auto-assignment and independent review routing work.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '9 auditors in directory',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'master-data' as MainTabId,
+  },
+  {
+    id: 'md-3',
+    group: '3. Master data & directories',
+    stepNum: 8,
+    title: 'Auditee directory (departments, units & unit heads)',
+    description:
+      'Maintain the list of business units, branch regions, and unit heads who receive notifications, inquiries, draft findings, and action-plan assignments.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '20 auditee units registered',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'master-data' as MainTabId,
+  },
+  {
+    id: 'md-4',
+    group: '3. Master data & directories',
+    stepNum: 9,
+    title: 'Signatories & approval hierarchy',
+    description:
+      'Confirm who acts as Chief Audit Executive (Head of Internal Audit) and Audit Managers for two-tier working paper review and report sign-off.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '1 CAE · 2 Audit Managers',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'access' as MainTabId,
+  },
+  {
+    id: 'up-1',
+    group: '4. Audit Universe & Annual Plan baseline',
+    stepNum: 10,
+    title: 'Populate the Audit Universe & last-audited dates',
+    description:
+      'Import or enter all auditable departments, branches, products/processes, IT systems, and vendors together with their inherent risk scores and last audit dates.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '160 auditable entities (30 Critical, 82 High)',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'universe' as MainTabId,
+  },
+  {
+    id: 'up-2',
+    group: '4. Audit Universe & Annual Plan baseline',
+    stepNum: 11,
+    title: 'Generate & balance the Annual Audit Plan',
+    description:
+      'Auto-populate due audits from the Universe, assign leads and reviewers, balance hours across quarters, and export the Audit Committee plan package.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '20 engagements across plan years',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'annual-plan' as MainTabId,
+  },
+  {
+    id: 'up-3',
+    group: '4. Audit Universe & Annual Plan baseline',
+    stepNum: 12,
+    title: 'Seed historical open issues for follow-up tracking',
+    description:
+      'Load any prior-year open audit findings, action owners, and target remediation dates so Stage 06 Follow-up & Closure reflects your live backlog.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '9 issues tracked (9 open)',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'issues' as MainTabId,
+  },
+  {
+    id: 'ac-1',
+    group: '5. Access control & go-live',
+    stepNum: 13,
+    title: 'User accounts & role-based access control',
+    description:
+      'Verify user accounts, role assignments (System Admin, CAE, Audit Manager, Auditor, Auditee), and engagement/unit scopes before activating RBAC.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: '13 active accounts · Enforcement: Simulated',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'access' as MainTabId,
+  },
+  {
+    id: 'ac-2',
+    group: '5. Access control & go-live',
+    stepNum: 14,
+    title: 'Remove sample data & take a baseline backup',
+    description:
+      'Once your real master data and universe are loaded, export a JSON backup from Settings so the baseline configuration can be restored at any time.',
+    status: 'Done' as 'Done' | 'In progress' | 'To do',
+    summary: 'Backup & restore available in Settings',
+    note: '',
+    actionLabel: 'Open →',
+    targetTab: 'settings' as MainTabId,
+  },
+];
+
+const DEFAULT_ACCESS_USERS = [
+  {
+    id: 'acc-1',
+    name: 'M. Santos',
+    title: 'Chief Audit Executive · Internal Audit',
+    email: 'm.santos@bank.com.ph',
+    roles: ['System administrator', 'Chief Audit Executive'],
+    scope: 'Full access',
+    status: 'Active',
+    employeeNumber: 'EMP-001',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: true,
+    isPrivileged: true,
+  },
+  {
+    id: 'acc-2',
+    name: 'J. Dela Cruz',
+    title: 'IT Audit Manager · Internal Audit',
+    email: 'j.delacruz@bank.com.ph',
+    roles: ['System administrator', 'Audit Manager'],
+    scope: 'Full access',
+    status: 'Active',
+    employeeNumber: 'EMP-002',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: true,
+    isPrivileged: true,
+  },
+  {
+    id: 'acc-3',
+    name: 'A. Villanueva',
+    title: 'Senior Operations Auditor · Internal Audit',
+    email: 'a.villanueva@bank.com.ph',
+    roles: ['Audit Manager', 'Auditor'],
+    scope: 'Assigned + team engagements',
+    status: 'Active',
+    employeeNumber: 'EMP-003',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-4',
+    name: 'P. Mendoza',
+    title: 'IT & InfoSec Auditor · Internal Audit',
+    email: 'p.mendoza@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2026-006)',
+    status: 'Active',
+    employeeNumber: 'EMP-004',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-5',
+    name: 'K. Lim',
+    title: 'Compliance & Branch Auditor · Internal Audit',
+    email: 'k.lim@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2026-004, AUD-2026-005, AUD-2026-007)',
+    status: 'Active',
+    employeeNumber: 'EMP-005',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-6',
+    name: 'D. Ramos',
+    title: 'Credit Review Specialist · Internal Audit',
+    email: 'd.ramos@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2027-003)',
+    status: 'Active',
+    employeeNumber: 'EMP-006',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-7',
+    name: 'B. Tolentino',
+    title: 'IT Systems Auditor · Internal Audit',
+    email: 'b.tolentino@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2026-003, AUD-2027-001)',
+    status: 'Active',
+    employeeNumber: 'EMP-007',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-8',
+    name: 'R. Garcia',
+    title: 'Operations & Financial Auditor · Internal Audit',
+    email: 'r.garcia@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2026-001, AUD-2027-002)',
+    status: 'Active',
+    employeeNumber: 'EMP-008',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-9',
+    name: 'L. Fernandez',
+    title: 'Branch & Compliance Auditor · Internal Audit',
+    email: 'l.fernandez@bank.com.ph',
+    roles: ['Auditor'],
+    scope: 'Assigned engagements (AUD-2026-002)',
+    status: 'Active',
+    employeeNumber: 'EMP-009',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-10',
+    name: 'R. Bautista',
+    title: 'VP, Operations · Operations',
+    email: 'r.bautista@bank.com.ph',
+    roles: ['Auditee'],
+    scope: 'Operations · Cash & clearing · Operations · Billing & collection',
+    status: 'Active',
+    employeeNumber: 'EMP-010',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-11',
+    name: 'E. Navarro',
+    title: 'VP, Chief Information Officer · Information Technology',
+    email: 'e.navarro@bank.com.ph',
+    roles: ['Auditee'],
+    scope: 'IT · Core banking (Temenos T24) · IT · Digital channels · IT · Payment switches',
+    status: 'Active',
+    employeeNumber: 'EMP-011',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-12',
+    name: 'V. Pascual',
+    title: 'VP, Consumer & Teacher Lending · Lending',
+    email: 'v.pascual@bank.com.ph',
+    roles: ['Auditee'],
+    scope: 'Lending · Salary loans · Lending · Product governance',
+    status: 'Active',
+    employeeNumber: 'EMP-012',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+  {
+    id: 'acc-13',
+    name: 'C. Dizon',
+    title: 'Chief Compliance Officer · Compliance',
+    email: 'c.dizon@bank.com.ph',
+    roles: ['Auditee'],
+    scope: 'Compliance · AML / CFT',
+    status: 'Active',
+    employeeNumber: 'EMP-013',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: false,
+    isPrivileged: false,
+  },
+];
+
 export const MasterDataSetupAccessView: React.FC<{
   tab: 'master-data' | 'setup' | 'access';
   currentUser: UserProfile;
@@ -1384,614 +2019,463 @@ export const MasterDataSetupAccessView: React.FC<{
   onUpdateUserProfile,
   onDeleteUserProfile,
 }) => {
-  // Master data state matching Audit-Management-System (4).png & (6).png
-  const [entityTypes, setEntityTypes] = useState([
-    'Department',
-    'Branch',
-    'Product / process',
-    'IT system',
-    'Vendor',
-  ]);
+  // ── Master data state with persistence ─────────────────────────────────────
+  const [entityTypes, setEntityTypes] = useState<string[]>(DEFAULT_ENTITY_TYPES);
   const [newEntityType, setNewEntityType] = useState('');
 
-  const [auditCategories, setAuditCategories] = useState([
-    'Operations',
-    'Credit review',
-    'IT audit',
-    'Information security',
-    'Compliance',
-    'Financial',
-    'Branch audit',
-  ]);
+  const [auditCategories, setAuditCategories] = useState<string[]>(DEFAULT_AUDIT_CATEGORIES);
   const [newAuditCategory, setNewAuditCategory] = useState('');
 
-  const [auditorsList, setAuditorsList] = useState([
-    {
-      name: 'M. Santos',
-      role: 'Chief Audit Executive',
-      email: 'm.santos@bank.com.ph',
-      skills: 'Operations, Credit review, IT audit, Information security, Compliance, Financial, Branch audit',
-    },
-    {
-      name: 'J. Dela Cruz',
-      role: 'IT Audit Manager',
-      email: 'j.delacruz@bank.com.ph',
-      skills: 'IT audit, Information security',
-    },
-    {
-      name: 'A. Villanueva',
-      role: 'Senior Operations Auditor',
-      email: 'a.villanueva@bank.com.ph',
-      skills: 'Operations, Financial, Branch audit',
-    },
-    {
-      name: 'P. Mendoza',
-      role: 'IT & InfoSec Auditor',
-      email: 'p.mendoza@bank.com.ph',
-      skills: 'IT audit, Information security',
-    },
-    {
-      name: 'K. Lim',
-      role: 'Compliance & Branch Auditor',
-      email: 'k.lim@bank.com.ph',
-      skills: 'Compliance, Branch audit, Operations',
-    },
-    {
-      name: 'D. Ramos',
-      role: 'Credit Review Specialist',
-      email: 'd.ramos@bank.com.ph',
-      skills: 'Credit review, Financial',
-    },
-    {
-      name: 'B. Tolentino',
-      role: 'IT Systems Auditor',
-      email: 'b.tolentino@bank.com.ph',
-      skills: 'IT audit, Operations',
-    },
-    {
-      name: 'R. Garcia',
-      role: 'Operations & Financial Auditor',
-      email: 'r.garcia@bank.com.ph',
-      skills: 'Operations, Financial, Compliance',
-    },
-    {
-      name: 'L. Fernandez',
-      role: 'Branch & Compliance Auditor',
-      email: 'l.fernandez@bank.com.ph',
-      skills: 'Branch audit, Compliance, Credit review',
-    },
-  ]);
-
-  const [auditeeDirectory, setAuditeeDirectory] = useState([
-    {
-      unit: 'Operations · Cash & clearing',
-      head: 'R. Bautista',
-      title: 'VP, Operations',
-      email: 'r.bautista@bank.com.ph',
-    },
-    {
-      unit: 'Operations · Billing & collection',
-      head: 'R. Bautista',
-      title: 'VP, Operations',
-      email: 'r.bautista@bank.com.ph',
-    },
-    {
-      unit: 'Operations · Records & Collateral',
-      head: 'R. Bautista',
-      title: 'VP, Operations',
-      email: 'r.bautista@bank.com.ph',
-    },
-    {
-      unit: 'Loan Release & Disbursement · Card ops',
-      head: 'G. Soriano',
-      title: 'AVP, Loan Release & Cards',
-      email: 'g.soriano@bank.com.ph',
-    },
-    {
-      unit: 'IT · Core banking (Temenos T24)',
-      head: 'E. Navarro',
-      title: 'VP, Chief Information Officer',
-      email: 'e.navarro@bank.com.ph',
-    },
-    {
-      unit: 'IT · Digital channels',
-      head: 'E. Navarro',
-      title: 'VP, Chief Information Officer',
-      email: 'e.navarro@bank.com.ph',
-    },
-    {
-      unit: 'IT · Payment switches',
-      head: 'E. Navarro',
-      title: 'VP, Chief Information Officer',
-      email: 'e.navarro@bank.com.ph',
-    },
-    {
-      unit: 'IT · Network & Infrastructure Security',
-      head: 'E. Navarro',
-      title: 'VP, Chief Information Officer',
-      email: 'e.navarro@bank.com.ph',
-    },
-    {
-      unit: 'IT & Operations · Mission-Critical Systems',
-      head: 'E. Navarro',
-      title: 'VP, Chief Information Officer',
-      email: 'e.navarro@bank.com.ph',
-    },
-    {
-      unit: 'Lending · Salary loans',
-      head: 'V. Pascual',
-      title: 'VP, Consumer & Teacher Lending',
-      email: 'v.pascual@bank.com.ph',
-    },
-    {
-      unit: 'Lending · Product governance',
-      head: 'V. Pascual',
-      title: 'VP, Consumer & Teacher Lending',
-      email: 'v.pascual@bank.com.ph',
-    },
-    {
-      unit: 'Lending · Key Regional Hub',
-      head: 'V. Pascual',
-      title: 'VP, Consumer & Teacher Lending',
-      email: 'v.pascual@bank.com.ph',
-    },
-    {
-      unit: 'Compliance · AML / CFT',
-      head: 'C. Dizon',
-      title: 'Chief Compliance Officer',
-      email: 'c.dizon@bank.com.ph',
-    },
-    {
-      unit: 'Legal & Compliance · Accreditation',
-      head: 'C. Dizon',
-      title: 'Chief Compliance Officer',
-      email: 'c.dizon@bank.com.ph',
-    },
-    {
-      unit: 'Vendor Management & IT · Compliance',
-      head: 'C. Dizon',
-      title: 'Chief Compliance Officer',
-      email: 'c.dizon@bank.com.ph',
-    },
-    {
-      unit: 'Treasury · Liquidity',
-      head: 'L. Mercado',
-      title: 'VP, Treasurer',
-      email: 'l.mercado@bank.com.ph',
-    },
-    {
-      unit: 'Finance · General Ledger',
-      head: 'L. Mercado',
-      title: 'VP, Treasurer',
-      email: 'l.mercado@bank.com.ph',
-    },
-    {
-      unit: 'Branch Banking · Mindanao Region',
-      head: 'G. Soriano',
-      title: 'VP, Branch Banking',
-      email: 'g.soriano@bank.com.ph',
-    },
-    {
-      unit: 'Branch Banking · Visayas Region',
-      head: 'G. Soriano',
-      title: 'VP, Branch Banking',
-      email: 'g.soriano@bank.com.ph',
-    },
-    {
-      unit: 'Administrative Services · General services',
-      head: 'M. Ocampo',
-      title: 'AVP, Administrative Services',
-      email: 'm.ocampo@bank.com.ph',
-    },
-  ]);
+  const [auditorsList, setAuditorsList] = useState<AuditorRecord[]>(DEFAULT_AUDITORS);
+  const [auditeeDirectory, setAuditeeDirectory] = useState<AuditeeUnitRecord[]>(DEFAULT_AUDITEE_DIRECTORY);
 
   // 14 Setup steps across 5 groups matching Audit-Management-System (8).png & (12).png
-  const [setupItems, setSetupItems] = useState([
-    // Group 1: 1. Organization & branding (2 of 2 done)
-    {
-      id: 'ob-1',
-      group: '1. Organization & branding',
-      stepNum: 1,
-      title: 'Organization name, unit & report header',
-      description:
-        'Set the institution name, internal audit department title, address, and confidentiality banner printed on all Word (.docx) memos and reports.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: 'City Savings Bank · Internal Audit Division',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'settings' as MainTabId,
-    },
-    {
-      id: 'ob-2',
-      group: '1. Organization & branding',
-      stepNum: 2,
-      title: 'Planning horizon & active audit year',
-      description:
-        'Confirm the multi-year planning window (default 2026–2028) and the active plan year shown on the Overview and Annual Plan.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: 'Active plan year: 2026 (3-year horizon)',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'annual-plan' as MainTabId,
-    },
-    // Group 2: 2. Audit methodology & risk scoring (3 of 3 done)
-    {
-      id: 'am-1',
-      group: '2. Audit methodology & risk scoring',
-      stepNum: 3,
-      title: 'Inherent risk matrix (Likelihood × Impact)',
-      description:
-        'Review the 5×5 scoring thresholds (Critical ≥ 16, High ≥ 10, Medium ≥ 5, Low < 5) and risk rating definitions.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '5×5 matrix · 4 risk tiers configured',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'universe' as MainTabId,
-    },
-    {
-      id: 'am-2',
-      group: '2. Audit methodology & risk scoring',
-      stepNum: 4,
-      title: 'Risk-based audit cycle frequencies',
-      description:
-        'Set how many months may elapse before an entity becomes due for re-audit based on its inherent risk rating.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: 'Critical 6m · High 12m · Medium 24m · Low 36m',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'settings' as MainTabId,
-    },
-    {
-      id: 'am-3',
-      group: '2. Audit methodology & risk scoring',
-      stepNum: 5,
-      title: 'Engagement sizing, hours & capacity defaults',
-      description:
-        'Configure working days, calendar span, team size, and budgeted hours per engagement size (Small, Medium, Large, Extra-large) plus annual auditor capacity.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '8 h/day · 220 days/auditor/yr (1,760 h)',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'settings' as MainTabId,
-    },
-    // Group 3: 3. Master data & directories (4 of 4 done)
-    {
-      id: 'md-1',
-      group: '3. Master data & directories',
-      stepNum: 6,
-      title: 'Entity types & audit categories',
-      description:
-        'Define the classification lists used in the Audit Universe and Annual Plan (e.g., Department, Branch, Product / process, IT system, Vendor; Operations, Credit review, IT audit, etc.).',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '5 entity types · 7 audit categories',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'master-data' as MainTabId,
-    },
-    {
-      id: 'md-2',
-      group: '3. Master data & directories',
-      stepNum: 7,
-      title: 'Internal Audit team & specialisations',
-      description:
-        'Register all internal auditors, their roles, email addresses, and category specialisations so auto-assignment and independent review routing work.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '9 auditors in directory',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'master-data' as MainTabId,
-    },
-    {
-      id: 'md-3',
-      group: '3. Master data & directories',
-      stepNum: 8,
-      title: 'Auditee directory (departments, units & unit heads)',
-      description:
-        'Maintain the list of business units, branch regions, and unit heads who receive notifications, inquiries, draft findings, and action-plan assignments.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '20 auditee units registered',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'master-data' as MainTabId,
-    },
-    {
-      id: 'md-4',
-      group: '3. Master data & directories',
-      stepNum: 9,
-      title: 'Signatories & approval hierarchy',
-      description:
-        'Confirm who acts as Chief Audit Executive (Head of Internal Audit) and Audit Managers for two-tier working paper review and report sign-off.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '1 CAE · 2 Audit Managers',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'access' as MainTabId,
-    },
-    // Group 4: 4. Audit Universe & Annual Plan baseline (3 of 3 done)
-    {
-      id: 'up-1',
-      group: '4. Audit Universe & Annual Plan baseline',
-      stepNum: 10,
-      title: 'Populate the Audit Universe & last-audited dates',
-      description:
-        'Import or enter all auditable departments, branches, products/processes, IT systems, and vendors together with their inherent risk scores and last audit dates.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '160 auditable entities (30 Critical, 82 High)',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'universe' as MainTabId,
-    },
-    {
-      id: 'up-2',
-      group: '4. Audit Universe & Annual Plan baseline',
-      stepNum: 11,
-      title: 'Generate & balance the Annual Audit Plan',
-      description:
-        'Auto-populate due audits from the Universe, assign leads and reviewers, balance hours across quarters, and export the Audit Committee plan package.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '20 engagements across plan years',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'annual-plan' as MainTabId,
-    },
-    {
-      id: 'up-3',
-      group: '4. Audit Universe & Annual Plan baseline',
-      stepNum: 12,
-      title: 'Seed historical open issues for follow-up tracking',
-      description:
-        'Load any prior-year open audit findings, action owners, and target remediation dates so Stage 06 Follow-up & Closure reflects your live backlog.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '9 issues tracked (9 open)',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'issues' as MainTabId,
-    },
-    // Group 5: 5. Access control & go-live (2 of 2 done)
-    {
-      id: 'ac-1',
-      group: '5. Access control & go-live',
-      stepNum: 13,
-      title: 'User accounts & role-based access control',
-      description:
-        'Verify user accounts, role assignments (System Admin, CAE, Audit Manager, Auditor, Auditee), and engagement/unit scopes before activating RBAC.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: '13 active accounts · Enforcement: Simulated',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'access' as MainTabId,
-    },
-    {
-      id: 'ac-2',
-      group: '5. Access control & go-live',
-      stepNum: 14,
-      title: 'Remove sample data & take a baseline backup',
-      description:
-        'Once your real master data and universe are loaded, export a JSON backup from Settings so the baseline configuration can be restored at any time.',
-      status: 'Done' as 'Done' | 'In progress' | 'To do',
-      summary: 'Backup & restore available in Settings',
-      note: '',
-      actionLabel: 'Open →',
-      targetTab: 'settings' as MainTabId,
-    },
-  ]);
+  const [setupItems, setSetupItems] = useState(DEFAULT_SETUP_ITEMS);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState('');
 
-  // Access state (13 user accounts matching Audit-Management-System (13).png: 9 IA staff + 4 Auditees)
-  const [accessUsers, setAccessUsers] = useState([
-    {
-      id: 'acc-1',
-      name: 'M. Santos',
-      title: 'Chief Audit Executive · Internal Audit',
-      email: 'm.santos@bank.com.ph',
-      roles: ['System administrator', 'Chief Audit Executive'],
-      scope: 'Full access',
-      status: 'Active',
-    },
-    {
-      id: 'acc-2',
-      name: 'J. Dela Cruz',
-      title: 'IT Audit Manager · Internal Audit',
-      email: 'j.delacruz@bank.com.ph',
-      roles: ['System administrator', 'Audit Manager'],
-      scope: 'Full access',
-      status: 'Active',
-    },
-    {
-      id: 'acc-3',
-      name: 'A. Villanueva',
-      title: 'Senior Operations Auditor · Internal Audit',
-      email: 'a.villanueva@bank.com.ph',
-      roles: ['Audit Manager', 'Auditor'],
-      scope: 'Assigned + team engagements',
-      status: 'Active',
-    },
-    {
-      id: 'acc-4',
-      name: 'P. Mendoza',
-      title: 'IT & InfoSec Auditor · Internal Audit',
-      email: 'p.mendoza@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2026-006)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-5',
-      name: 'K. Lim',
-      title: 'Compliance & Branch Auditor · Internal Audit',
-      email: 'k.lim@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2026-004, AUD-2026-005, AUD-2026-007)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-6',
-      name: 'D. Ramos',
-      title: 'Credit Review Specialist · Internal Audit',
-      email: 'd.ramos@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2027-003)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-7',
-      name: 'B. Tolentino',
-      title: 'IT Systems Auditor · Internal Audit',
-      email: 'b.tolentino@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2026-003, AUD-2027-001)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-8',
-      name: 'R. Garcia',
-      title: 'Operations & Financial Auditor · Internal Audit',
-      email: 'r.garcia@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2026-001, AUD-2027-002)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-9',
-      name: 'L. Fernandez',
-      title: 'Branch & Compliance Auditor · Internal Audit',
-      email: 'l.fernandez@bank.com.ph',
-      roles: ['Auditor'],
-      scope: 'Assigned engagements (AUD-2026-002)',
-      status: 'Active',
-    },
-    {
-      id: 'acc-10',
-      name: 'R. Bautista',
-      title: 'VP, Operations · Operations',
-      email: 'r.bautista@bank.com.ph',
-      roles: ['Auditee'],
-      scope: 'Operations · Cash & clearing · Operations · Billing & collection',
-      status: 'Active',
-    },
-    {
-      id: 'acc-11',
-      name: 'E. Navarro',
-      title: 'VP, Chief Information Officer · Information Technology',
-      email: 'e.navarro@bank.com.ph',
-      roles: ['Auditee'],
-      scope: 'IT · Core banking (Temenos T24) · IT · Digital channels · IT · Payment switches',
-      status: 'Active',
-    },
-    {
-      id: 'acc-12',
-      name: 'V. Pascual',
-      title: 'VP, Consumer & Teacher Lending · Lending',
-      email: 'v.pascual@bank.com.ph',
-      roles: ['Auditee'],
-      scope: 'Lending · Salary loans · Lending · Product governance',
-      status: 'Active',
-    },
-    {
-      id: 'acc-13',
-      name: 'C. Dizon',
-      title: 'Chief Compliance Officer · Compliance',
-      email: 'c.dizon@bank.com.ph',
-      roles: ['Auditee'],
-      scope: 'Compliance · AML / CFT',
-      status: 'Active',
-    },
-  ]);
+  // ── Modal State for Auditors ───────────────────────────────────────────────
+  const [showAuditorModal, setShowAuditorModal] = useState(false);
+  const [editingAuditorEmail, setEditingAuditorEmail] = useState<string | null>(null);
+  const [auditorFormName, setAuditorFormName] = useState('');
+  const [auditorFormRole, setAuditorFormRole] = useState('Senior Operations Auditor');
+  const [auditorFormEmail, setAuditorFormEmail] = useState('');
+  const [auditorFormSkills, setAuditorFormSkills] = useState('');
 
-  // Role permission matrix matching Audit-Management-System (13).png bottom card
+  // ── Modal State for Auditee Directory ──────────────────────────────────────
+  const [showAuditeeModal, setShowAuditeeModal] = useState(false);
+  const [editingAuditeeUnit, setEditingAuditeeUnit] = useState<string | null>(null);
+  const [auditeeFormUnit, setAuditeeFormUnit] = useState('');
+  const [auditeeFormHead, setAuditeeFormHead] = useState('');
+  const [auditeeFormTitle, setAuditeeFormTitle] = useState('VP, Operations');
+  const [auditeeFormEmail, setAuditeeFormEmail] = useState('');
+
+  // ── Access Users state & sync with DB profiles ─────────────────────────────
+  const [accessUsers, setAccessUsers] = useState(DEFAULT_ACCESS_USERS);
+
+  // ── Load persisted master data & setup checklist on mount ───────────────────
+  useEffect(() => {
+    fetchMasterData('entity_types', DEFAULT_ENTITY_TYPES).then(setEntityTypes);
+    fetchMasterData('audit_categories', DEFAULT_AUDIT_CATEGORIES).then(setAuditCategories);
+    fetchMasterData('auditors', DEFAULT_AUDITORS).then(setAuditorsList);
+    fetchMasterData('auditee_directory', DEFAULT_AUDITEE_DIRECTORY).then(setAuditeeDirectory);
+    fetchMasterData('setup_checklist', DEFAULT_SETUP_ITEMS).then(setSetupItems);
+  }, []);
+
+  // Sync access users whenever userProfiles from Supabase change
+  useEffect(() => {
+    if (userProfiles && userProfiles.length > 0) {
+      const dbUsers = userProfiles.map((p) => ({
+        id: p.id,
+        name: p.name,
+        title: `${p.roleTitle || 'Internal Auditor'} · ${p.department || 'Internal Audit'}`,
+        email: p.name.toLowerCase().replace(/\s+/g, '.') + '@bank.com.ph',
+        roles: p.canApproveCAE
+          ? ['System administrator', 'Chief Audit Executive']
+          : p.canApproveHead
+          ? ['Chief Audit Executive']
+          : p.canApproveIndependent
+          ? ['Audit Manager', 'Auditor']
+          : [p.roleTitle || 'Auditor'],
+        scope: p.department === 'Internal Audit' ? 'Full access' : `${p.department} operations`,
+        status: p.accountStatus || 'Active',
+        employeeNumber: p.employeeNumber || 'EMP-DB',
+        dateGranted: '2026-01-15',
+        lastModified: '2026-01-15',
+        lastLoginDate: '—',
+        failedLoginCount: p.failedLoginCount || 0,
+        isLocked: p.isLocked || false,
+        requiresPasswordChange: p.requiresPasswordChange || false,
+        mfaEnabled: p.mfaEnabled || false,
+        isPrivileged: p.isPrivileged || false,
+      }));
+
+      // Merge ensuring DB profiles are prioritized and baseline accounts are retained
+      const merged: any[] = [...dbUsers];
+      DEFAULT_ACCESS_USERS.forEach((def) => {
+        if (!merged.some((m) => m.name.toLowerCase() === def.name.toLowerCase() || m.id === def.id)) {
+          merged.push(def);
+        }
+      });
+      setAccessUsers(merged as any);
+    }
+  }, [userProfiles]);
+
+  // ── Access tab local security state ────────────────────────────────────────
+  const [accessNotice, setAccessNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [showAddUserForm, setShowAddUserForm] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserEmployeeNo, setNewUserEmployeeNo] = useState('');
+  const [newUserRole, setNewUserRole] = useState('Auditor');
+  const [newUserScope, setNewUserScope] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+  const [newUserNameError, setNewUserNameError] = useState('');
+  const [resetTargetId, setResetTargetId] = useState<string | null>(null);
+  const [generatedTempPw, setGeneratedTempPw] = useState('');
+  const [showTempPw, setShowTempPw] = useState(false);
+  const [loginSimUser, setLoginSimUser] = useState('');
+  const [loginSimPw, setLoginSimPw] = useState('');
+  const [showLoginSimPw, setShowLoginSimPw] = useState(false);
+  const [loginSimError, setLoginSimError] = useState('');
+  const [loginSimSuccess, setLoginSimSuccess] = useState('');
+
+  const notifyAccess = (type: 'success' | 'error', msg: string) => {
+    setAccessNotice({ type, msg });
+    setTimeout(() => setAccessNotice(null), 4500);
+  };
+
+  // ── Handlers: Entity Types ─────────────────────────────────────────────────
+  const handleAddEntityType = () => {
+    if (!newEntityType.trim()) return;
+    const trimmed = newEntityType.trim();
+    if (entityTypes.includes(trimmed)) return;
+    const updated = [...entityTypes, trimmed];
+    setEntityTypes(updated);
+    saveMasterData('entity_types', updated);
+    setNewEntityType('');
+  };
+
+  const handleRemoveEntityType = (et: string) => {
+    const updated = entityTypes.filter((item) => item !== et);
+    setEntityTypes(updated);
+    saveMasterData('entity_types', updated);
+  };
+
+  // ── Handlers: Audit Categories ─────────────────────────────────────────────
+  const handleAddAuditCategory = () => {
+    if (!newAuditCategory.trim()) return;
+    const trimmed = newAuditCategory.trim();
+    if (auditCategories.includes(trimmed)) return;
+    const updated = [...auditCategories, trimmed];
+    setAuditCategories(updated);
+    saveMasterData('audit_categories', updated);
+    setNewAuditCategory('');
+  };
+
+  const handleRemoveAuditCategory = (cat: string) => {
+    const updated = auditCategories.filter((item) => item !== cat);
+    setAuditCategories(updated);
+    saveMasterData('audit_categories', updated);
+  };
+
+  // ── Handlers: Auditors List ────────────────────────────────────────────────
+  const handleOpenAddAuditor = () => {
+    setEditingAuditorEmail(null);
+    setAuditorFormName('');
+    setAuditorFormRole('Senior Operations Auditor');
+    setAuditorFormEmail('');
+    setAuditorFormSkills('Operations, Financial, Compliance');
+    setShowAuditorModal(true);
+  };
+
+  const handleOpenEditAuditor = (aud: AuditorRecord) => {
+    setEditingAuditorEmail(aud.email);
+    setAuditorFormName(aud.name);
+    setAuditorFormRole(aud.role);
+    setAuditorFormEmail(aud.email);
+    setAuditorFormSkills(aud.skills);
+    setShowAuditorModal(true);
+  };
+
+  const handleSaveAuditor = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auditorFormName.trim() || !auditorFormEmail.trim()) return;
+    const item: AuditorRecord = {
+      name: auditorFormName.trim(),
+      role: auditorFormRole.trim() || 'Internal Auditor',
+      email: auditorFormEmail.trim(),
+      skills: auditorFormSkills.trim() || 'General Audit',
+    };
+
+    let updated: AuditorRecord[];
+    if (editingAuditorEmail) {
+      updated = auditorsList.map((a) => (a.email === editingAuditorEmail ? item : a));
+    } else {
+      updated = [...auditorsList, item];
+    }
+    setAuditorsList(updated);
+    saveMasterData('auditors', updated);
+    setShowAuditorModal(false);
+  };
+
+  const handleRemoveAuditor = (email: string) => {
+    const updated = auditorsList.filter((a) => a.email !== email);
+    setAuditorsList(updated);
+    saveMasterData('auditors', updated);
+  };
+
+  // ── Handlers: Auditee Directory ────────────────────────────────────────────
+  const handleOpenAddAuditee = () => {
+    setEditingAuditeeUnit(null);
+    setAuditeeFormUnit('');
+    setAuditeeFormHead('');
+    setAuditeeFormTitle('VP, Head of Unit');
+    setAuditeeFormEmail('');
+    setShowAuditeeModal(true);
+  };
+
+  const handleOpenEditAuditee = (dir: AuditeeUnitRecord) => {
+    setEditingAuditeeUnit(dir.unit);
+    setAuditeeFormUnit(dir.unit);
+    setAuditeeFormHead(dir.head);
+    setAuditeeFormTitle(dir.title);
+    setAuditeeFormEmail(dir.email);
+    setShowAuditeeModal(true);
+  };
+
+  const handleSaveAuditee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auditeeFormUnit.trim() || !auditeeFormHead.trim()) return;
+    const item: AuditeeUnitRecord = {
+      unit: auditeeFormUnit.trim(),
+      head: auditeeFormHead.trim(),
+      title: auditeeFormTitle.trim() || 'Unit Head',
+      email: auditeeFormEmail.trim() || 'auditee@bank.com.ph',
+    };
+
+    let updated: AuditeeUnitRecord[];
+    if (editingAuditeeUnit) {
+      updated = auditeeDirectory.map((d) => (d.unit === editingAuditeeUnit ? item : d));
+    } else {
+      updated = [...auditeeDirectory, item];
+    }
+    setAuditeeDirectory(updated);
+    saveMasterData('auditee_directory', updated);
+    setShowAuditeeModal(false);
+  };
+
+  const handleRemoveAuditee = (unit: string) => {
+    const updated = auditeeDirectory.filter((d) => d.unit !== unit);
+    setAuditeeDirectory(updated);
+    saveMasterData('auditee_directory', updated);
+  };
+
+  // ── Handlers: Setup Checklist ──────────────────────────────────────────────
+  const handleCycleStatus = (id: string) => {
+    setSetupItems((prev) => {
+      const updated = prev.map((item) => {
+        if (item.id !== id) return item;
+        const nextStatus: 'Done' | 'In progress' | 'To do' =
+          item.status === 'Done'
+            ? 'To do'
+            : item.status === 'To do'
+            ? 'In progress'
+            : 'Done';
+        return { ...item, status: nextStatus };
+      });
+      saveMasterData('setup_checklist', updated);
+      return updated;
+    });
+  };
+
+  const handleMarkAllDone = () => {
+    setSetupItems((prev) => {
+      const updated = prev.map((item) => ({ ...item, status: 'Done' as const }));
+      saveMasterData('setup_checklist', updated);
+      return updated;
+    });
+  };
+
+  const handleResetChecklist = () => {
+    setSetupItems((prev) => {
+      const updated = prev.map((item) => ({ ...item, status: 'To do' as const }));
+      saveMasterData('setup_checklist', updated);
+      return updated;
+    });
+  };
+
+  const handleSaveNote = (id: string) => {
+    setSetupItems((prev) => {
+      const updated = prev.map((item) => (item.id === id ? { ...item, note: draftNote.trim() } : item));
+      saveMasterData('setup_checklist', updated);
+      return updated;
+    });
+    setEditingNoteId(null);
+    setDraftNote('');
+  };
+
+  // ── Derived counts for Access Tab ──────────────────────────────────────────
+  const activeCount = accessUsers.filter((u) => u.status === 'Active').length;
+  const suspendedCount = accessUsers.filter((u) => u.status === 'Suspended').length;
+  const lockedCount = accessUsers.filter((u) => (u as any).isLocked).length;
+  const iaStaffCount = accessUsers.filter((u) => !u.roles.includes('Auditee')).length;
+  const auditeeCount = accessUsers.filter((u) => u.roles.includes('Auditee')).length;
+  const privilegedCount = accessUsers.filter(
+    (u) => u.roles.includes('System administrator') || u.roles.includes('Chief Audit Executive')
+  ).length;
+
+  const handleExportAccessList = () => {
+    const rows: AccessListRow[] = accessUsers.map((u) => ({
+      username: u.email.split('@')[0],
+      fullName: u.name,
+      email: u.email,
+      employeeNumber: (u as any).employeeNumber || '—',
+      roles: u.roles,
+      scope: u.scope,
+      accountStatus: u.status,
+      dateGranted: (u as any).dateGranted || '2026-01-15',
+      lastModified: (u as any).lastModified || '2026-01-15',
+      lastLogin: (u as any).lastLoginDate || '—',
+    }));
+    const csv = exportAccessListCsv(rows);
+    downloadCsv(csv, `UAM_AccessList_${new Date().toISOString().slice(0, 10)}.csv`);
+    notifyAccess('success', 'LAC-3: User access list exported as CSV for UAM review.');
+  };
+
+  const handleSimulateLogin = () => {
+    setLoginSimError('');
+    setLoginSimSuccess('');
+    if (!loginSimUser.trim() || !loginSimPw.trim()) {
+      setLoginSimError(genericAuthError());
+      return;
+    }
+    const found = accessUsers.find(
+      (u) => u.email.split('@')[0].toLowerCase() === loginSimUser.trim().toLowerCase()
+    );
+    if (!found) {
+      setLoginSimError(genericAuthError());
+      return;
+    }
+    if ((found as any).isLocked) {
+      setLoginSimError(
+        'Your account has been locked due to multiple failed login attempts. Please contact your system administrator to unlock.'
+      );
+      return;
+    }
+    if (loginSimPw !== 'CorrectPw!1') {
+      const { newCount, shouldLock } = processFailedLogin((found as any).failedLoginCount || 0);
+      setAccessUsers((prev) =>
+        prev.map((u) =>
+          u.id === found.id
+            ? { ...u, failedLoginCount: newCount, isLocked: shouldLock } as any
+            : u
+        )
+      );
+      if (shouldLock) {
+        setLoginSimError(
+          `IA-8/IA-9: Account "${found.name}" has been locked after ${newCount} consecutive failed attempts. Administrator intervention required to unlock. — ${genericAuthError()}`
+        );
+      } else {
+        setLoginSimError(`${genericAuthError()} (Attempt ${newCount} of 3)`);
+      }
+      return;
+    }
+    setAccessUsers((prev) =>
+      prev.map((u) =>
+        u.id === found.id
+          ? { ...u, failedLoginCount: 0, isLocked: false, lastLoginDate: new Date().toISOString() } as any
+          : u
+      )
+    );
+    setLoginSimSuccess(`IA-1/SM-4: Login successful. Session token issued. Previous sessions revoked. Welcome, ${found.name}.`);
+  };
+
+  const handleAdminUnlock = (userId: string, userName: string) => {
+    const reset = unlockAccount();
+    setAccessUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, ...reset } as any : u))
+    );
+    notifyAccess('success', `IA-9: Account "${userName}" has been unlocked by the administrator. Failed login counter reset.`);
+  };
+
+  const handleGenerateTempPw = (userId: string) => {
+    const tmp = generateTemporaryPassword();
+    setGeneratedTempPw(tmp);
+    setResetTargetId(userId);
+    setShowTempPw(false);
+    setAccessUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, requiresPasswordChange: true } as any : u))
+    );
+  };
+
+  const handleAddUser = () => {
+    setNewUserNameError('');
+    if (!newUserName.trim() || !newUserEmail.trim()) {
+      notifyAccess('error', 'Name and email are required.');
+      return;
+    }
+    const existingUsernames = accessUsers.map((u) => u.email.split('@')[0]);
+    const candidateUsername = newUserEmail.split('@')[0];
+    if (isUsernameTaken(candidateUsername, existingUsernames)) {
+      setNewUserNameError(`IA-2: Username "${candidateUsername}" already exists. Each user must have a unique username/ID.`);
+      return;
+    }
+    if (newUserPassword) {
+      const { valid, violations } = validatePasswordStrength(newUserPassword, newUserRole === 'System administrator');
+      if (!valid) {
+        notifyAccess('error', `PM-1/PM-2: Password does not meet policy: ${violations[0]}`);
+        return;
+      }
+    }
+    const newAcc = {
+      id: `acc-${Date.now()}`,
+      name: newUserName.trim(),
+      title: `${newUserRole} · Internal Audit`,
+      email: newUserEmail.trim(),
+      roles: [newUserRole],
+      scope: newUserScope.trim() || 'Assigned engagements',
+      status: 'Active',
+      employeeNumber: newUserEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-4)}`,
+      dateGranted: new Date().toISOString().slice(0, 10),
+      lastModified: new Date().toISOString().slice(0, 10),
+      lastLoginDate: '—',
+      failedLoginCount: 0,
+      isLocked: false,
+      requiresPasswordChange: true,
+      passwordLastChanged: null,
+      mfaEnabled: false,
+      isPrivileged: newUserRole === 'System administrator',
+    };
+    setAccessUsers((prev) => [...prev, newAcc as any]);
+    if (onAddUserProfile) {
+      onAddUserProfile({
+        id: newAcc.id,
+        name: newAcc.name,
+        roleTitle: `${newUserRole} (Internal Audit)`,
+        fullLabel: `${newAcc.name} – ${newUserRole}`,
+        headerSubtitle: newUserRole,
+        department: 'Internal Audit',
+        canApproveHead: newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator',
+        canApproveIndependent: newUserRole === 'Audit Manager' || newUserRole === 'Auditor',
+        canApproveCAE: newUserRole === 'Chief Audit Executive',
+        employeeNumber: newAcc.employeeNumber,
+        accountStatus: 'Active',
+        failedLoginCount: 0,
+        isLocked: false,
+        requiresPasswordChange: true,
+        mfaEnabled: false,
+        isPrivileged: newUserRole === 'System administrator',
+      });
+    }
+    notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created. Temporary password issued. Password change required on first login.`);
+    setNewUserName(''); setNewUserEmail(''); setNewUserEmployeeNo('');
+    setNewUserRole('Auditor'); setNewUserScope(''); setNewUserPassword('');
+    setShowAddUserForm(false);
+  };
+
+  const getUserExpiryState = (u: any) => {
+    return getPasswordExpiryState(u.passwordLastChanged || null, u.mfaEnabled || false);
+  };
+
   const rolePermissionsMatrix = [
-    {
-      capability: 'System Setup, Master Data & Settings',
-      sysAdmin: 'Full',
-      cae: 'Full',
-      manager: 'View',
-      auditor: '—',
-      auditee: '—',
-    },
-    {
-      capability: 'User Accounts & Role Assignments (Access)',
-      sysAdmin: 'Full',
-      cae: 'View',
-      manager: '—',
-      auditor: '—',
-      auditee: '—',
-    },
-    {
-      capability: 'Audit Universe & Inherent Risk Scoring',
-      sysAdmin: 'Full',
-      cae: 'Full',
-      manager: 'Edit',
-      auditor: 'View',
-      auditee: '—',
-    },
-    {
-      capability: 'Annual Audit Plan & Budgeted Hours',
-      sysAdmin: 'Full',
-      cae: 'Approve & Edit',
-      manager: 'Propose & Edit',
-      auditor: 'View',
-      auditee: '—',
-    },
-    {
-      capability: 'Stage 02 Notification & Kickoff Memo',
-      sysAdmin: 'Full',
-      cae: 'Issue & Sign',
-      manager: 'Draft',
-      auditor: 'Draft (assigned)',
-      auditee: 'Receive & Acknowledge',
-    },
-    {
-      capability: 'Stage 03 Working Papers — Prepare & Submit',
-      sysAdmin: 'Full',
-      cae: 'View all',
-      manager: 'Prepare / Reassign',
-      auditor: 'Assigned engagements',
-      auditee: 'Respond to inquiries',
-    },
-    {
-      capability: 'Stage 03 Tier 1 Independent Quality Review',
-      sysAdmin: 'Configure',
-      cae: 'Override',
-      manager: 'Approve / Return',
-      auditor: 'Peer reviewer only',
-      auditee: '—',
-    },
-    {
-      capability: 'Stage 03 Tier 2 Head of Internal Audit Sign-Off',
-      sysAdmin: 'Configure',
-      cae: 'Final Sign-Off',
-      manager: '—',
-      auditor: '—',
-      auditee: '—',
-    },
-    {
-      capability: 'Stage 04 Exit Conference & Management Responses',
-      sysAdmin: 'Full',
-      cae: 'Approve',
-      manager: 'Facilitate',
-      auditor: 'Record minutes',
-      auditee: 'Submit action plan & target date',
-    },
-    {
-      capability: 'Stage 05 Final Audit Report Issuance',
-      sysAdmin: 'Full',
-      cae: 'Approve & Issue',
-      manager: 'Review draft',
-      auditor: 'Compile draft',
-      auditee: 'Read issued report',
-    },
-    {
-      capability: 'Stage 06 Follow-up, Extensions & Issue Closure',
-      sysAdmin: 'Full',
-      cae: 'Close Critical/High',
-      manager: 'Verify & Close',
-      auditor: 'Test remediation',
-      auditee: 'Upload remediation evidence',
-    },
+    { capability: 'System Setup, Master Data & Settings', sysAdmin: 'Full', cae: 'Full', manager: 'View', auditor: '—', auditee: '—' },
+    { capability: 'User Accounts & Role Assignments (Access)', sysAdmin: 'Full', cae: 'View', manager: '—', auditor: '—', auditee: '—' },
+    { capability: 'Audit Universe & Inherent Risk Scoring', sysAdmin: 'Full', cae: 'Full', manager: 'Edit', auditor: 'View', auditee: '—' },
+    { capability: 'Annual Audit Plan & Budgeted Hours', sysAdmin: 'Full', cae: 'Approve & Edit', manager: 'Propose & Edit', auditor: 'View', auditee: '—' },
+    { capability: 'Stage 02 Notification & Kickoff Memo', sysAdmin: 'Full', cae: 'Issue & Sign', manager: 'Draft', auditor: 'Draft (assigned)', auditee: 'Receive & Acknowledge' },
+    { capability: 'Stage 03 Working Papers — Prepare & Submit', sysAdmin: 'Full', cae: 'View all', manager: 'Prepare / Reassign', auditor: 'Assigned engagements', auditee: 'Respond to inquiries' },
+    { capability: 'Stage 03 Tier 1 Independent Quality Review', sysAdmin: 'Configure', cae: 'Override', manager: 'Approve / Return', auditor: 'Peer reviewer only', auditee: '—' },
+    { capability: 'Stage 03 Tier 2 Head of Internal Audit Sign-Off', sysAdmin: 'Configure', cae: 'Final Sign-Off', manager: '—', auditor: '—', auditee: '—' },
+    { capability: 'Stage 04 Exit Conference & Management Responses', sysAdmin: 'Full', cae: 'Approve', manager: 'Facilitate', auditor: 'Record minutes', auditee: 'Submit action plan & target date' },
+    { capability: 'Stage 05 Final Audit Report Issuance', sysAdmin: 'Full', cae: 'Approve & Issue', manager: 'Review draft', auditor: 'Compile draft', auditee: 'Read issued report' },
+    { capability: 'Stage 06 Follow-up, Extensions & Issue Closure', sysAdmin: 'Full', cae: 'Close Critical/High', manager: 'Verify & Close', auditor: 'Test remediation', auditee: 'Upload remediation evidence' },
   ];
 
-  // TAB: MASTER DATA (Exact match to Audit-Management-System (4).png & (6).png)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TAB: MASTER DATA
+  // ═══════════════════════════════════════════════════════════════════════════
   if (tab === 'master-data') {
     return (
       <div className="space-y-4">
@@ -2015,9 +2499,7 @@ export const MasterDataSetupAccessView: React.FC<{
                   <span>{et}</span>
                   <button
                     type="button"
-                    onClick={() =>
-                      setEntityTypes((prev) => prev.filter((item) => item !== et))
-                    }
+                    onClick={() => handleRemoveEntityType(et)}
                     className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                   >
                     Remove
@@ -2031,16 +2513,13 @@ export const MasterDataSetupAccessView: React.FC<{
                 type="text"
                 value={newEntityType}
                 onChange={(e) => setNewEntityType(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddEntityType()}
                 placeholder="New entity type (e.g. Outsourced vendor)"
-                className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 placeholder:text-slate-400"
+                className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#492785]"
               />
               <button
                 type="button"
-                onClick={() => {
-                  if (!newEntityType.trim()) return;
-                  setEntityTypes((prev) => [...prev, newEntityType.trim()]);
-                  setNewEntityType('');
-                }}
+                onClick={handleAddEntityType}
                 className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer"
               >
                 Add
@@ -2066,9 +2545,7 @@ export const MasterDataSetupAccessView: React.FC<{
                   <span>{cat}</span>
                   <button
                     type="button"
-                    onClick={() =>
-                      setAuditCategories((prev) => prev.filter((item) => item !== cat))
-                    }
+                    onClick={() => handleRemoveAuditCategory(cat)}
                     className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                   >
                     Remove
@@ -2082,16 +2559,13 @@ export const MasterDataSetupAccessView: React.FC<{
                 type="text"
                 value={newAuditCategory}
                 onChange={(e) => setNewAuditCategory(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddAuditCategory()}
                 placeholder="New audit category (e.g. ESG / sustainability)"
-                className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 placeholder:text-slate-400"
+                className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#492785]"
               />
               <button
                 type="button"
-                onClick={() => {
-                  if (!newAuditCategory.trim()) return;
-                  setAuditCategories((prev) => [...prev, newAuditCategory.trim()]);
-                  setNewAuditCategory('');
-                }}
+                onClick={handleAddAuditCategory}
                 className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer"
               >
                 Add
@@ -2100,7 +2574,7 @@ export const MasterDataSetupAccessView: React.FC<{
           </div>
         </div>
 
-        {/* Auditors Card matching Audit-Management-System (6).png */}
+        {/* Auditors Card */}
         <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2113,20 +2587,10 @@ export const MasterDataSetupAccessView: React.FC<{
             </div>
             <button
               type="button"
-              onClick={() => {
-                setAuditorsList((prev) => [
-                  ...prev,
-                  {
-                    name: 'S. Magsaysay',
-                    role: 'IT & Cyber Risk Auditor',
-                    email: 's.magsaysay@bank.com.ph',
-                    skills: 'IT audit, Information security, Compliance',
-                  },
-                ]);
-              }}
+              onClick={handleOpenAddAuditor}
               className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer"
             >
-              Add auditor
+              + Add auditor
             </button>
           </div>
 
@@ -2143,37 +2607,24 @@ export const MasterDataSetupAccessView: React.FC<{
               </thead>
               <tbody className="divide-y divide-slate-200/80">
                 {auditorsList.map((aud) => (
-                  <tr key={aud.email}>
+                  <tr key={aud.email} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 pr-4 font-bold text-slate-900">{aud.name}</td>
                     <td className="py-3 px-4 text-slate-700">{aud.role}</td>
-                    <td className="py-3 px-4 text-xs text-slate-600">{aud.email}</td>
+                    <td className="py-3 px-4 text-xs font-mono text-slate-600">{aud.email}</td>
                     <td className="py-3 px-4 text-xs text-slate-600">{aud.skills}</td>
                     <td className="py-3 pl-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            const updatedRole = `${aud.role} (Lead)`;
-                            setAuditorsList((prev) =>
-                              prev.map((a) =>
-                                a.email === aud.email
-                                  ? { ...a, role: a.role.includes('(Lead)') ? a.role : updatedRole }
-                                  : a
-                              )
-                            );
-                          }}
+                          onClick={() => handleOpenEditAuditor(aud)}
                           className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setAuditorsList((prev) =>
-                              prev.filter((a) => a.email !== aud.email)
-                            )
-                          }
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                          onClick={() => handleRemoveAuditor(aud.email)}
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium cursor-pointer"
                         >
                           Remove
                         </button>
@@ -2181,12 +2632,19 @@ export const MasterDataSetupAccessView: React.FC<{
                     </td>
                   </tr>
                 ))}
+                {auditorsList.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
+                      No internal auditors registered. Click &ldquo;+ Add auditor&rdquo; to register team members.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Auditee Directory Card matching Audit-Management-System (6).png */}
+        {/* Auditee Directory Card */}
         <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -2199,20 +2657,10 @@ export const MasterDataSetupAccessView: React.FC<{
             </div>
             <button
               type="button"
-              onClick={() => {
-                setAuditeeDirectory((prev) => [
-                  ...prev,
-                  {
-                    unit: 'Digital Channels & bancassurance',
-                    head: 'M. Ocampo',
-                    title: 'VP, Head of Digital Banking',
-                    email: 'm.ocampo@bank.com.ph',
-                  },
-                ]);
-              }}
+              onClick={handleOpenAddAuditee}
               className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer"
             >
-              Add auditee unit
+              + Add auditee unit
             </button>
           </div>
 
@@ -2229,40 +2677,28 @@ export const MasterDataSetupAccessView: React.FC<{
               </thead>
               <tbody className="divide-y divide-slate-200/80">
                 {auditeeDirectory.map((dir) => (
-                  <tr key={dir.unit}>
+                  <tr key={dir.unit} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 pr-4 font-bold text-slate-900">
                       {dir.unit}
                     </td>
                     <td className="py-3 px-4 text-slate-800">{dir.head}</td>
                     <td className="py-3 px-4 text-xs text-slate-600">{dir.title}</td>
-                    <td className="py-3 px-4 text-xs text-slate-600">
+                    <td className="py-3 px-4 text-xs font-mono text-slate-600">
                       {dir.email}
                     </td>
                     <td className="py-3 pl-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            setAuditeeDirectory((prev) =>
-                              prev.map((d) =>
-                                d.unit === dir.unit
-                                  ? { ...d, title: `${d.title} (Verified)` }
-                                  : d
-                              )
-                            );
-                          }}
+                          onClick={() => handleOpenEditAuditee(dir)}
                           className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setAuditeeDirectory((prev) =>
-                              prev.filter((d) => d.unit !== dir.unit)
-                            )
-                          }
-                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                          onClick={() => handleRemoveAuditee(dir.unit)}
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium cursor-pointer"
                         >
                           Remove
                         </button>
@@ -2270,15 +2706,187 @@ export const MasterDataSetupAccessView: React.FC<{
                     </td>
                   </tr>
                 ))}
+                {auditeeDirectory.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
+                      No auditee units registered. Click &ldquo;+ Add auditee unit&rdquo; to register auditable departments.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Modal: Add/Edit Auditor */}
+        {showAuditorModal && (
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-6 text-xs">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingAuditorEmail ? 'Edit Auditor' : 'Add Internal Auditor'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Register an auditor in the pool for automatic lead assignment and review workflows.
+              </p>
+              <form onSubmit={handleSaveAuditor} className="mt-4 space-y-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Auditor Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={auditorFormName}
+                    onChange={(e) => setAuditorFormName(e.target.value)}
+                    placeholder="e.g. S. Magsaysay"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Role / Position *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={auditorFormRole}
+                    onChange={(e) => setAuditorFormRole(e.target.value)}
+                    placeholder="e.g. IT Audit Manager"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={auditorFormEmail}
+                    onChange={(e) => setAuditorFormEmail(e.target.value)}
+                    placeholder="s.magsaysay@bank.com.ph"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Specialisations &amp; Expertise (Comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={auditorFormSkills}
+                    onChange={(e) => setAuditorFormSkills(e.target.value)}
+                    placeholder="e.g. Operations, Credit review, IT audit, Compliance"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditorModal(false)}
+                    className="px-3.5 py-1.5 border border-slate-300 rounded-md font-semibold text-slate-700 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
+                  >
+                    {editingAuditorEmail ? 'Update Auditor' : 'Save Auditor'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Add/Edit Auditee Unit */}
+        {showAuditeeModal && (
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-6 text-xs">
+              <h3 className="text-base font-bold text-slate-900">
+                {editingAuditeeUnit ? 'Edit Auditee Directory Unit' : 'Add Auditee Unit & Head'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Register a department, business unit, and unit head for audit notices and action plans.
+              </p>
+              <form onSubmit={handleSaveAuditee} className="mt-4 space-y-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Department / Unit Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={auditeeFormUnit}
+                    onChange={(e) => setAuditeeFormUnit(e.target.value)}
+                    placeholder="e.g. Digital Channels & Bancassurance"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Unit Head Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={auditeeFormHead}
+                    onChange={(e) => setAuditeeFormHead(e.target.value)}
+                    placeholder="e.g. M. Ocampo"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Official Title / Designation
+                  </label>
+                  <input
+                    type="text"
+                    value={auditeeFormTitle}
+                    onChange={(e) => setAuditeeFormTitle(e.target.value)}
+                    placeholder="e.g. VP, Head of Digital Banking"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={auditeeFormEmail}
+                    onChange={(e) => setAuditeeFormEmail(e.target.value)}
+                    placeholder="m.ocampo@bank.com.ph"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditeeModal(false)}
+                    className="px-3.5 py-1.5 border border-slate-300 rounded-md font-semibold text-slate-700 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
+                  >
+                    {editingAuditeeUnit ? 'Update Unit' : 'Save Unit'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  // TAB: SETUP (Implementation · Configuration cockpit matching Audit-Management-System (8).png & (12).png)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TAB: SETUP (Implementation · Configuration cockpit)
+  // ═══════════════════════════════════════════════════════════════════════════
   if (tab === 'setup') {
     const groups = [
       '1. Organization & branding',
@@ -2291,37 +2899,6 @@ export const MasterDataSetupAccessView: React.FC<{
     const doneCount = setupItems.filter((item) => item.status === 'Done').length;
     const totalCount = setupItems.length;
     const pctDone = Math.round((doneCount / totalCount) * 100);
-
-    const handleCycleStatus = (id: string) => {
-      setSetupItems((prev) =>
-        prev.map((item) => {
-          if (item.id !== id) return item;
-          const nextStatus: 'Done' | 'In progress' | 'To do' =
-            item.status === 'Done'
-              ? 'To do'
-              : item.status === 'To do'
-              ? 'In progress'
-              : 'Done';
-          return { ...item, status: nextStatus };
-        })
-      );
-    };
-
-    const handleMarkAllDone = () => {
-      setSetupItems((prev) => prev.map((item) => ({ ...item, status: 'Done' })));
-    };
-
-    const handleResetChecklist = () => {
-      setSetupItems((prev) => prev.map((item) => ({ ...item, status: 'To do' })));
-    };
-
-    const handleSaveNote = (id: string) => {
-      setSetupItems((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, note: draftNote.trim() } : item))
-      );
-      setEditingNoteId(null);
-      setDraftNote('');
-    };
 
     return (
       <div className="space-y-4">
@@ -2385,7 +2962,6 @@ export const MasterDataSetupAccessView: React.FC<{
               key={groupName}
               className="bg-white rounded-lg border border-slate-200/90 shadow-2xs overflow-hidden"
             >
-              {/* Card Header */}
               <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between">
                 <h3 className="text-[16px] font-bold text-slate-900 tracking-tight">
                   {groupName}
@@ -2395,7 +2971,6 @@ export const MasterDataSetupAccessView: React.FC<{
                 </span>
               </div>
 
-              {/* Step Rows */}
               <div className="divide-y divide-slate-200/80">
                 {groupItems.map((step) => {
                   const isDone = step.status === 'Done';
@@ -2406,7 +2981,6 @@ export const MasterDataSetupAccessView: React.FC<{
                       key={step.id}
                       className="px-6 py-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4 hover:bg-slate-50/40 transition-colors"
                     >
-                      {/* Left Icon + Details */}
                       <div className="flex items-start gap-3.5 min-w-0">
                         <button
                           type="button"
@@ -2431,7 +3005,6 @@ export const MasterDataSetupAccessView: React.FC<{
                             {step.description}
                           </p>
 
-                          {/* Status Pill + Summary Text + Note */}
                           <div className="flex flex-wrap items-center gap-2 mt-2">
                             {isDone ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#DCEFE2] text-[#1E6339]">
@@ -2501,7 +3074,6 @@ export const MasterDataSetupAccessView: React.FC<{
                         </div>
                       </div>
 
-                      {/* Right Action Button */}
                       <div className="flex items-center gap-2 shrink-0 pt-0.5">
                         <button
                           type="button"
@@ -2526,211 +3098,9 @@ export const MasterDataSetupAccessView: React.FC<{
     );
   }
 
-  // ── BSSC V3: Access tab local security state ─────────────────────────────
-  const [accessNotice, setAccessNotice] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-  const [showAddUserForm, setShowAddUserForm] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserEmployeeNo, setNewUserEmployeeNo] = useState('');
-  const [newUserRole, setNewUserRole] = useState('Auditor');
-  const [newUserScope, setNewUserScope] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
-  const [newUserNameError, setNewUserNameError] = useState('');
-  // PM-10: password reset flow
-  const [resetTargetId, setResetTargetId] = useState<string | null>(null);
-  const [generatedTempPw, setGeneratedTempPw] = useState('');
-  const [showTempPw, setShowTempPw] = useState(false);
-  // IA-8/IA-9: simulate failed logins
-  const [loginSimUser, setLoginSimUser] = useState('');
-  const [loginSimPw, setLoginSimPw] = useState('');
-  const [showLoginSimPw, setShowLoginSimPw] = useState(false);
-  const [loginSimError, setLoginSimError] = useState('');
-  const [loginSimSuccess, setLoginSimSuccess] = useState('');
-
-  const notifyAccess = (type: 'success' | 'error', msg: string) => {
-    setAccessNotice({ type, msg });
-    setTimeout(() => setAccessNotice(null), 4500);
-  };
-
-  // ── Derived counts ────────────────────────────────────────────────────────
-  const activeCount = accessUsers.filter((u) => u.status === 'Active').length;
-  const suspendedCount = accessUsers.filter((u) => u.status === 'Suspended').length;
-  const lockedCount = accessUsers.filter((u) => (u as any).isLocked).length;
-  const iaStaffCount = accessUsers.filter((u) => !u.roles.includes('Auditee')).length;
-  const auditeeCount = accessUsers.filter((u) => u.roles.includes('Auditee')).length;
-  const privilegedCount = accessUsers.filter(
-    (u) => u.roles.includes('System administrator') || u.roles.includes('Chief Audit Executive')
-  ).length;
-
-  // ── LAC-3: export user access list as CSV ────────────────────────────────
-  const handleExportAccessList = () => {
-    const rows: AccessListRow[] = accessUsers.map((u) => ({
-      username: u.email.split('@')[0],
-      fullName: u.name,
-      email: u.email,
-      employeeNumber: (u as any).employeeNumber || '—',
-      roles: u.roles,
-      scope: u.scope,
-      accountStatus: u.status,
-      dateGranted: (u as any).dateGranted || '2026-01-15',
-      lastModified: (u as any).lastModified || '2026-01-15',
-      lastLogin: (u as any).lastLoginDate || '—',
-    }));
-    const csv = exportAccessListCsv(rows);
-    downloadCsv(csv, `UAM_AccessList_${new Date().toISOString().slice(0, 10)}.csv`);
-    notifyAccess('success', 'LAC-3: User access list exported as CSV for UAM review.');
-  };
-
-  // ── IA-8/IA-9: simulate login attempt ────────────────────────────────────
-  const handleSimulateLogin = () => {
-    setLoginSimError('');
-    setLoginSimSuccess('');
-    if (!loginSimUser.trim() || !loginSimPw.trim()) {
-      setLoginSimError(genericAuthError());
-      return;
-    }
-    const found = accessUsers.find(
-      (u) => u.email.split('@')[0].toLowerCase() === loginSimUser.trim().toLowerCase()
-    );
-    if (!found) {
-      // IA-7: generic error — do not reveal whether username exists
-      setLoginSimError(genericAuthError());
-      return;
-    }
-    if ((found as any).isLocked) {
-      setLoginSimError(
-        'Your account has been locked due to multiple failed login attempts. Please contact your system administrator to unlock.'
-      );
-      return;
-    }
-    // Simulate wrong password → increment counter
-    if (loginSimPw !== 'CorrectPw!1') {
-      const { newCount, shouldLock } = processFailedLogin((found as any).failedLoginCount || 0);
-      setAccessUsers((prev) =>
-        prev.map((u) =>
-          u.id === found.id
-            ? { ...u, failedLoginCount: newCount, isLocked: shouldLock } as any
-            : u
-        )
-      );
-      if (shouldLock) {
-        setLoginSimError(
-          `IA-8/IA-9: Account "${found.name}" has been locked after ${newCount} consecutive failed attempts. Administrator intervention required to unlock. — ${genericAuthError()}`
-        );
-      } else {
-        setLoginSimError(`${genericAuthError()} (Attempt ${newCount} of 3)`);
-      }
-      return;
-    }
-    // Success
-    setAccessUsers((prev) =>
-      prev.map((u) =>
-        u.id === found.id
-          ? { ...u, failedLoginCount: 0, isLocked: false, lastLoginDate: new Date().toISOString() } as any
-          : u
-      )
-    );
-    setLoginSimSuccess(`IA-1/SM-4: Login successful. Session token issued. Previous sessions revoked. Welcome, ${found.name}.`);
-  };
-
-  // ── IA-9: admin unlock ────────────────────────────────────────────────────
-  const handleAdminUnlock = (userId: string, userName: string) => {
-    const reset = unlockAccount();
-    setAccessUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, ...reset } as any : u))
-    );
-    notifyAccess('success', `IA-9: Account "${userName}" has been unlocked by the administrator. Failed login counter reset.`);
-  };
-
-  // ── PM-4/PM-10: generate temporary password ───────────────────────────────
-  const handleGenerateTempPw = (userId: string) => {
-    const tmp = generateTemporaryPassword();
-    setGeneratedTempPw(tmp);
-    setResetTargetId(userId);
-    setShowTempPw(false);
-    // Flag user to require password change on next login (PM-3)
-    setAccessUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, requiresPasswordChange: true } as any : u))
-    );
-  };
-
-  // ── IA-2/LAC-1: add user with duplicate-username check ───────────────────
-  const handleAddUser = () => {
-    setNewUserNameError('');
-    if (!newUserName.trim() || !newUserEmail.trim()) {
-      notifyAccess('error', 'Name and email are required.');
-      return;
-    }
-    // IA-2: prevent duplicate usernames
-    const existingUsernames = accessUsers.map((u) => u.email.split('@')[0]);
-    const candidateUsername = newUserEmail.split('@')[0];
-    if (isUsernameTaken(candidateUsername, existingUsernames)) {
-      setNewUserNameError(`IA-2: Username "${candidateUsername}" already exists. Each user must have a unique username/ID.`);
-      return;
-    }
-    // PM-2: validate password if provided
-    if (newUserPassword) {
-      const { valid, violations } = validatePasswordStrength(newUserPassword, newUserRole === 'System administrator');
-      if (!valid) {
-        notifyAccess('error', `PM-1/PM-2: Password does not meet policy: ${violations[0]}`);
-        return;
-      }
-    }
-    // PM-4: generate a cryptographically secure temporary password (not stored client-side)
-    void (newUserPassword || generateTemporaryPassword());
-    const newAcc = {
-      id: `acc-${Date.now()}`,
-      name: newUserName.trim(),
-      title: `${newUserRole} · Internal Audit`,
-      email: newUserEmail.trim(),
-      roles: [newUserRole],
-      scope: newUserScope.trim() || 'Assigned engagements',
-      status: 'Active',
-      employeeNumber: newUserEmployeeNo.trim() || `EMP-${Date.now().toString().slice(-4)}`,
-      dateGranted: new Date().toISOString().slice(0, 10),
-      lastModified: new Date().toISOString().slice(0, 10),
-      lastLoginDate: '—',
-      failedLoginCount: 0,
-      isLocked: false,
-      requiresPasswordChange: true, // PM-3: force change on first login
-      passwordLastChanged: null,
-      mfaEnabled: false,
-      isPrivileged: newUserRole === 'System administrator',
-    };
-    setAccessUsers((prev) => [...prev, newAcc as any]);
-    if (onAddUserProfile) {
-      onAddUserProfile({
-        id: newAcc.id,
-        name: newAcc.name,
-        roleTitle: `${newUserRole} (Internal Audit)`,
-        fullLabel: `${newAcc.name} – ${newUserRole}`,
-        headerSubtitle: newUserRole,
-        department: 'Internal Audit',
-        canApproveHead: newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator',
-        canApproveIndependent: newUserRole === 'Audit Manager' || newUserRole === 'Auditor',
-        canApproveCAE: newUserRole === 'Chief Audit Executive',
-        employeeNumber: newAcc.employeeNumber,
-        accountStatus: 'Active',
-        failedLoginCount: 0,
-        isLocked: false,
-        requiresPasswordChange: true,
-        mfaEnabled: false,
-        isPrivileged: newUserRole === 'System administrator',
-      });
-    }
-    notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created. Temporary password issued. Password change required on first login.`);
-    // Reset form
-    setNewUserName(''); setNewUserEmail(''); setNewUserEmployeeNo('');
-    setNewUserRole('Auditor'); setNewUserScope(''); setNewUserPassword('');
-    setShowAddUserForm(false);
-  };
-
-  // ── Password expiry check helper ──────────────────────────────────────────
-  const getUserExpiryState = (u: any) => {
-    return getPasswordExpiryState(u.passwordLastChanged || null, u.mfaEnabled || false);
-  };
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TAB: ACCESS CONTROL & USER MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-4">
       {/* Global notification banner */}
@@ -2823,7 +3193,6 @@ export const MasterDataSetupAccessView: React.FC<{
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs text-slate-600 mb-1">Username (email prefix)</label>
-            {/* IA-5: no autocomplete on auth fields */}
             <input type="text" autoComplete="off" value={loginSimUser}
               onChange={(e) => setLoginSimUser(e.target.value)}
               placeholder="e.g. m.santos"
@@ -2832,12 +3201,10 @@ export const MasterDataSetupAccessView: React.FC<{
           <div>
             <label className="block text-xs text-slate-600 mb-1">Password</label>
             <div className="relative">
-              {/* IA-5: autocomplete="new-password" prevents hint display */}
               <input type={showLoginSimPw ? 'text' : 'password'} autoComplete="new-password" value={loginSimPw}
                 onChange={(e) => setLoginSimPw(e.target.value)}
                 placeholder="Enter password"
                 className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 w-44 pr-10" />
-              {/* IA-6 (optional): show/hide password toggle */}
               <button type="button" onClick={() => setShowLoginSimPw((p) => !p)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
                 {showLoginSimPw ? '🙈' : '👁️'}
@@ -2889,7 +3256,7 @@ export const MasterDataSetupAccessView: React.FC<{
           </div>
         </div>
 
-        {/* IA-1/IA-2: Add user form with duplicate username validation */}
+        {/* Add user form */}
         {showAddUserForm && (
           <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
             <div className="text-xs font-bold text-slate-900 mb-1">New user account — IA-1 / IA-2 / PM-3 / PM-4</div>
@@ -2933,12 +3300,10 @@ export const MasterDataSetupAccessView: React.FC<{
                   Initial password <span className="text-slate-400">(PM-4: leave blank for auto-generated)</span>
                 </label>
                 <div className="relative">
-                  {/* IA-5: autocomplete="new-password", no hint */}
                   <input type={showNewUserPassword ? 'text' : 'password'} autoComplete="new-password"
                     value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)}
                     placeholder="Auto-generated if empty"
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 pr-10" />
-                  {/* IA-6: show/hide toggle */}
                   <button type="button" onClick={() => setShowNewUserPassword((p) => !p)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
                     {showNewUserPassword ? '🙈' : '👁️'}
@@ -3232,7 +3597,7 @@ export const MasterDataSetupAccessView: React.FC<{
           </div>
         </div>
         <div className="mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-800">
-          <strong>SM-3 (optional):</strong> A countdown dialog appears 2 minutes before idle timeout: "Your session will expire in 2 minutes. Click to stay logged in."
+          <strong>SM-3 (optional):</strong> A countdown dialog appears 2 minutes before idle timeout: &ldquo;Your session will expire in 2 minutes. Click to stay logged in.&rdquo;
           Session cookies issued with <code>Secure</code>, <code>HttpOnly</code>, and <code>SameSite=Strict</code> attributes.
           Session ID regenerated after each successful login (session fixation prevention).
         </div>

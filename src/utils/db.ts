@@ -528,3 +528,60 @@ export async function saveFrequencies(freq: AuditFrequencies): Promise<void> {
   });
   if (error) console.error('saveFrequencies:', error.message);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Master data & Setup checklist persistence
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchMasterData<T>(key: string, fallback: T): Promise<T> {
+  // 1. Try Supabase public.master_data
+  try {
+    const { data, error } = await supabase
+      .from('master_data')
+      .select('data')
+      .eq('id', key)
+      .single();
+    if (!error && data?.data !== undefined && data?.data !== null) {
+      try {
+        localStorage.setItem(`ams_master_${key}`, JSON.stringify(data.data));
+      } catch {
+        // ignore
+      }
+      return data.data as T;
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try localStorage
+  try {
+    const cached = localStorage.getItem(`ams_master_${key}`);
+    if (cached) {
+      return JSON.parse(cached) as T;
+    }
+  } catch {
+    // ignore
+  }
+
+  return fallback;
+}
+
+export async function saveMasterData<T>(key: string, value: T): Promise<void> {
+  // 1. Immediately write to localStorage so reload NEVER loses data
+  try {
+    localStorage.setItem(`ams_master_${key}`, JSON.stringify(value));
+  } catch (err) {
+    console.warn('localStorage save failed:', err);
+  }
+
+  // 2. Try to sync to Supabase public.master_data
+  try {
+    await supabase.from('master_data').upsert({
+      id: key,
+      data: value as any,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // If table does not exist in Supabase, localStorage ensures it stays persistent
+  }
+}
