@@ -27,6 +27,7 @@ import {
   genericAuthError,
   AccessListRow,
 } from '../utils/security';
+import { createOrSyncSystemUser } from '../utils/authStore';
 
 // 1. OVERVIEW VIEW
 export const OverviewView: React.FC<{
@@ -432,19 +433,41 @@ export const AuditUniverseView: React.FC<{
   onDeleteUniverseEntity?: (id: string) => void;
 }> = ({ frequencies, universeRecords, onAddUniverseEntity, onDeleteUniverseEntity }) => {
   const [records, setRecords] = useState<UniverseRecord[]>(universeRecords);
+  const [dynamicEntityTypes, setDynamicEntityTypes] = useState<string[]>(DEFAULT_ENTITY_TYPES);
+  const [dynamicCategories, setDynamicCategories] = useState<string[]>(DEFAULT_AUDIT_CATEGORIES);
+  const [dynamicOwners, setDynamicOwners] = useState<AuditeeUnitRecord[]>(DEFAULT_AUDITEE_DIRECTORY);
 
   React.useEffect(() => {
     setRecords(universeRecords);
   }, [universeRecords]);
 
+  React.useEffect(() => {
+    fetchMasterData('entity_types', DEFAULT_ENTITY_TYPES).then((types) => {
+      if (types && types.length > 0) setDynamicEntityTypes(types);
+    });
+    fetchMasterData('audit_categories', DEFAULT_AUDIT_CATEGORIES).then((cats) => {
+      if (cats && cats.length > 0) {
+        setDynamicCategories(cats);
+        setNewSubtitle(cats[0]);
+      }
+    });
+    fetchMasterData('auditee_directory', DEFAULT_AUDITEE_DIRECTORY).then((dirs) => {
+      if (dirs && dirs.length > 0) {
+        setDynamicOwners(dirs);
+        setNewOwner(`${dirs[0].head} (${dirs[0].unit})`);
+      }
+    });
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All types');
+  const [categoryFilter, setCategoryFilter] = useState('All categories');
   const [riskFilter, setRiskFilter] = useState('All risk levels');
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Add entity form
   const [newName, setNewName] = useState('');
-  const [newSubtitle, setNewSubtitle] = useState('Operations · Branch banking');
+  const [newSubtitle, setNewSubtitle] = useState('Operations');
   const [newType, setNewType] = useState<UniverseRecord['type']>('Process');
   const [newOwner, setNewOwner] = useState('R. Bautista');
   const [newLikelihood, setNewLikelihood] = useState(4);
@@ -457,9 +480,10 @@ export const AuditUniverseView: React.FC<{
       r.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.owner.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'All types' || r.type === typeFilter;
+    const matchesCat = categoryFilter === 'All categories' || r.subtitle.toLowerCase().includes(categoryFilter.toLowerCase());
     const matchesRisk =
       riskFilter === 'All risk levels' || r.riskLevel === riskFilter;
-    return matchesSearch && matchesType && matchesRisk;
+    return matchesSearch && matchesType && matchesCat && matchesRisk;
   });
 
   const handleAddEntity = (e: React.FormEvent) => {
@@ -560,12 +584,21 @@ export const AuditUniverseView: React.FC<{
           className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
         >
           <option value="All types">All types</option>
-          <option value="Process">Process</option>
-          <option value="IT system">IT system</option>
-          <option value="Branch">Branch</option>
-          <option value="Department">Department</option>
-          <option value="Vendor">Vendor</option>
-          <option value="Product / process">Product / process</option>
+          {dynamicEntityTypes.map((et) => (
+            <option key={et} value={et}>{et}</option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Filter by category"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
+        >
+          <option value="All categories">All categories</option>
+          {dynamicCategories.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
         </select>
 
         <select
@@ -724,45 +757,50 @@ export const AuditUniverseView: React.FC<{
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Division / Category Subtitle
+                  Division / Category
                 </label>
-                <input
-                  type="text"
+                <select
                   value={newSubtitle}
                   onChange={(e) => setNewSubtitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
-                />
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                >
+                  {dynamicCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Type
+                    Entity Type
                   </label>
                   <select
                     value={newType}
                     onChange={(e) =>
                       setNewType(e.target.value as UniverseRecord['type'])
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   >
-                    <option value="Process">Process</option>
-                    <option value="IT system">IT system</option>
-                    <option value="Branch">Branch</option>
-                    <option value="Department">Department</option>
-                    <option value="Vendor">Vendor</option>
-                    <option value="Product / process">Product / process</option>
+                    {dynamicEntityTypes.map((et) => (
+                      <option key={et} value={et}>{et}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     Process Owner
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newOwner}
                     onChange={(e) => setNewOwner(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  >
+                    {dynamicOwners.map((owner) => (
+                      <option key={owner.head + ' - ' + owner.unit} value={`${owner.head} (${owner.unit})`}>
+                        {owner.head} — {owner.unit}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1394,6 +1432,26 @@ const DEFAULT_AUDIT_CATEGORIES = [
   'Branch audit',
 ];
 
+export const APP_ROLES = [
+  'System administrator',
+  'Chief Audit Executive',
+  'Audit Division Head',
+  'Supervising Auditor',
+  'Audit-in-Charge',
+  'Assisting Auditor',
+  'Auditee',
+] as const;
+
+export type AppRole = (typeof APP_ROLES)[number];
+
+export const normalizeRole = (r?: string): string => {
+  if (!r) return 'Assisting Auditor';
+  const trimmed = r.trim();
+  if (trimmed === 'Auditor') return 'Assisting Auditor';
+  if (trimmed === 'Audit Manager') return 'Audit Division Head';
+  return trimmed;
+};
+
 const DEFAULT_AUDITORS: AuditorRecord[] = [
   {
     name: 'M. Santos',
@@ -1403,49 +1461,49 @@ const DEFAULT_AUDITORS: AuditorRecord[] = [
   },
   {
     name: 'J. Dela Cruz',
-    role: 'IT Audit Manager',
+    role: 'Audit Division Head',
     email: 'j.delacruz@bank.com.ph',
     skills: 'IT audit, Information security',
   },
   {
     name: 'A. Villanueva',
-    role: 'Senior Operations Auditor',
+    role: 'Supervising Auditor',
     email: 'a.villanueva@bank.com.ph',
     skills: 'Operations, Financial, Branch audit',
   },
   {
     name: 'P. Mendoza',
-    role: 'IT & InfoSec Auditor',
+    role: 'Audit-in-Charge',
     email: 'p.mendoza@bank.com.ph',
     skills: 'IT audit, Information security',
   },
   {
     name: 'K. Lim',
-    role: 'Compliance & Branch Auditor',
+    role: 'Assisting Auditor',
     email: 'k.lim@bank.com.ph',
     skills: 'Compliance, Branch audit, Operations',
   },
   {
     name: 'D. Ramos',
-    role: 'Credit Review Specialist',
+    role: 'Assisting Auditor',
     email: 'd.ramos@bank.com.ph',
     skills: 'Credit review, Financial',
   },
   {
     name: 'B. Tolentino',
-    role: 'IT Systems Auditor',
+    role: 'Assisting Auditor',
     email: 'b.tolentino@bank.com.ph',
     skills: 'IT audit, Operations',
   },
   {
     name: 'R. Garcia',
-    role: 'Operations & Financial Auditor',
+    role: 'Assisting Auditor',
     email: 'r.garcia@bank.com.ph',
     skills: 'Operations, Financial, Compliance',
   },
   {
     name: 'L. Fernandez',
-    role: 'Branch & Compliance Auditor',
+    role: 'Assisting Auditor',
     email: 'l.fernandez@bank.com.ph',
     skills: 'Branch audit, Compliance, Credit review',
   },
@@ -1781,9 +1839,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-2',
     name: 'J. Dela Cruz',
-    title: 'IT Audit Manager · Internal Audit',
+    title: 'Audit Division Head · Internal Audit',
     email: 'j.delacruz@bank.com.ph',
-    roles: ['System administrator', 'Audit Manager'],
+    roles: ['System administrator', 'Audit Division Head'],
     scope: 'Full access',
     status: 'Active',
     employeeNumber: 'EMP-002',
@@ -1799,9 +1857,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-3',
     name: 'A. Villanueva',
-    title: 'Senior Operations Auditor · Internal Audit',
+    title: 'Supervising Auditor · Internal Audit',
     email: 'a.villanueva@bank.com.ph',
-    roles: ['Audit Manager', 'Auditor'],
+    roles: ['Supervising Auditor'],
     scope: 'Assigned + team engagements',
     status: 'Active',
     employeeNumber: 'EMP-003',
@@ -1817,9 +1875,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-4',
     name: 'P. Mendoza',
-    title: 'IT & InfoSec Auditor · Internal Audit',
+    title: 'Audit-in-Charge · Internal Audit',
     email: 'p.mendoza@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Audit-in-Charge'],
     scope: 'Assigned engagements (AUD-2026-006)',
     status: 'Active',
     employeeNumber: 'EMP-004',
@@ -1835,9 +1893,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-5',
     name: 'K. Lim',
-    title: 'Compliance & Branch Auditor · Internal Audit',
+    title: 'Assisting Auditor · Internal Audit',
     email: 'k.lim@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-004, AUD-2026-005, AUD-2026-007)',
     status: 'Active',
     employeeNumber: 'EMP-005',
@@ -1853,9 +1911,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-6',
     name: 'D. Ramos',
-    title: 'Credit Review Specialist · Internal Audit',
+    title: 'Assisting Auditor · Internal Audit',
     email: 'd.ramos@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2027-003)',
     status: 'Active',
     employeeNumber: 'EMP-006',
@@ -1871,9 +1929,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-7',
     name: 'B. Tolentino',
-    title: 'IT Systems Auditor · Internal Audit',
+    title: 'Assisting Auditor · Internal Audit',
     email: 'b.tolentino@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-003, AUD-2027-001)',
     status: 'Active',
     employeeNumber: 'EMP-007',
@@ -1889,9 +1947,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-8',
     name: 'R. Garcia',
-    title: 'Operations & Financial Auditor · Internal Audit',
+    title: 'Assisting Auditor · Internal Audit',
     email: 'r.garcia@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-001, AUD-2027-002)',
     status: 'Active',
     employeeNumber: 'EMP-008',
@@ -1907,9 +1965,9 @@ const DEFAULT_ACCESS_USERS = [
   {
     id: 'acc-9',
     name: 'L. Fernandez',
-    title: 'Branch & Compliance Auditor · Internal Audit',
+    title: 'Assisting Auditor · Internal Audit',
     email: 'l.fernandez@bank.com.ph',
-    roles: ['Auditor'],
+    roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-002)',
     status: 'Active',
     employeeNumber: 'EMP-009',
@@ -1996,6 +2054,31 @@ const DEFAULT_ACCESS_USERS = [
   },
 ];
 
+export interface MatrixRow {
+  capability: string;
+  sysAdmin: string;
+  cae: string;
+  divHead: string;
+  supervising: string;
+  inCharge: string;
+  assisting: string;
+  auditee: string;
+}
+
+export const DEFAULT_ROLE_PERMISSIONS_MATRIX: MatrixRow[] = [
+  { capability: 'System Setup, Master Data & Settings', sysAdmin: 'Full', cae: 'Full', divHead: 'View', supervising: 'View', inCharge: '—', assisting: '—', auditee: '—' },
+  { capability: 'User Accounts & Role Assignments (Access)', sysAdmin: 'Full', cae: 'View', divHead: '—', supervising: '—', inCharge: '—', assisting: '—', auditee: '—' },
+  { capability: 'Audit Universe & Inherent Risk Scoring', sysAdmin: 'Full', cae: 'Full', divHead: 'Edit', supervising: 'Edit', inCharge: 'View', assisting: 'View', auditee: '—' },
+  { capability: 'Annual Audit Plan & Budgeted Hours', sysAdmin: 'Full', cae: 'Approve & Edit', divHead: 'Propose & Edit', supervising: 'Propose', inCharge: 'View', assisting: 'View', auditee: '—' },
+  { capability: 'Stage 02 Notification & Kickoff Memo', sysAdmin: 'Full', cae: 'Issue & Sign', divHead: 'Review & Sign', supervising: 'Review', inCharge: 'Draft', assisting: 'Draft (assigned)', auditee: 'Receive & Acknowledge' },
+  { capability: 'Stage 03 Working Papers — Prepare & Submit', sysAdmin: 'Full', cae: 'View all', divHead: 'Review / Reassign', supervising: 'Review / Reassign', inCharge: 'Lead & Prepare', assisting: 'Assigned audit tests', auditee: 'Respond to inquiries' },
+  { capability: 'Stage 03 Tier 1 Independent Quality Review', sysAdmin: 'Configure', cae: 'Override', divHead: 'Approve / Return', supervising: 'Approve / Return', inCharge: 'Review notes', assisting: 'Peer reviewer only', auditee: '—' },
+  { capability: 'Stage 03 Tier 2 Head of Internal Audit Sign-Off', sysAdmin: 'Configure', cae: 'Final Sign-Off', divHead: 'Sign-Off', supervising: 'Recommend', inCharge: '—', assisting: '—', auditee: '—' },
+  { capability: 'Stage 04 Exit Conference & Management Responses', sysAdmin: 'Full', cae: 'Approve', divHead: 'Lead & Facilitate', supervising: 'Facilitate', inCharge: 'Present findings', assisting: 'Record minutes', auditee: 'Submit action plan & target date' },
+  { capability: 'Stage 05 Final Audit Report Issuance', sysAdmin: 'Full', cae: 'Approve & Issue', divHead: 'Final Review', supervising: 'Review draft', inCharge: 'Compile draft', assisting: 'Compile draft', auditee: 'Read issued report' },
+  { capability: 'Stage 06 Follow-up, Extensions & Issue Closure', sysAdmin: 'Full', cae: 'Close Critical/High', divHead: 'Verify & Close', supervising: 'Verify', inCharge: 'Test remediation', assisting: 'Test remediation', auditee: 'Upload remediation evidence' },
+];
+
 export const MasterDataSetupAccessView: React.FC<{
   tab: 'master-data' | 'setup' | 'access';
   currentUser: UserProfile;
@@ -2022,11 +2105,16 @@ export const MasterDataSetupAccessView: React.FC<{
   // ── Master data state with persistence ─────────────────────────────────────
   const [entityTypes, setEntityTypes] = useState<string[]>(DEFAULT_ENTITY_TYPES);
   const [newEntityType, setNewEntityType] = useState('');
+  const [editingEntityType, setEditingEntityType] = useState<string | null>(null);
+  const [editingEntityValue, setEditingEntityValue] = useState('');
 
   const [auditCategories, setAuditCategories] = useState<string[]>(DEFAULT_AUDIT_CATEGORIES);
   const [newAuditCategory, setNewAuditCategory] = useState('');
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState('');
 
   const [auditorsList, setAuditorsList] = useState<AuditorRecord[]>(DEFAULT_AUDITORS);
+  const [auditorSearch, setAuditorSearch] = useState('');
   const [auditeeDirectory, setAuditeeDirectory] = useState<AuditeeUnitRecord[]>(DEFAULT_AUDITEE_DIRECTORY);
 
   // 14 Setup steps across 5 groups matching Audit-Management-System (8).png & (12).png
@@ -2052,6 +2140,24 @@ export const MasterDataSetupAccessView: React.FC<{
 
   // ── Access Users state & sync with DB profiles ─────────────────────────────
   const [accessUsers, setAccessUsers] = useState(DEFAULT_ACCESS_USERS);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('All roles');
+  const [userStatusFilter, setUserStatusFilter] = useState('All statuses');
+
+  // ── Edit Access Modal State ────────────────────────────────────────────────
+  const [editingAccessUser, setEditingAccessUser] = useState<any | null>(null);
+  const [editFormName, setEditFormName] = useState('');
+  const [editFormRole, setEditFormRole] = useState('Assisting Auditor');
+  const [editFormScope, setEditFormScope] = useState('');
+  const [editFormStatus, setEditFormStatus] = useState('Active');
+  const [editFormEmpNo, setEditFormEmpNo] = useState('');
+  const [editFormMfa, setEditFormMfa] = useState(false);
+  const [editFormPrivileged, setEditFormPrivileged] = useState(false);
+
+  // ── Configurable Role Permissions Matrix ───────────────────────────────────
+  const [matrixRows, setMatrixRows] = useState<MatrixRow[]>(DEFAULT_ROLE_PERMISSIONS_MATRIX);
+  const [isEditingMatrix, setIsEditingMatrix] = useState(false);
+  const [newMatrixCapability, setNewMatrixCapability] = useState('');
 
   // ── Load persisted master data & setup checklist on mount ───────────────────
   useEffect(() => {
@@ -2060,6 +2166,11 @@ export const MasterDataSetupAccessView: React.FC<{
     fetchMasterData('auditors', DEFAULT_AUDITORS).then(setAuditorsList);
     fetchMasterData('auditee_directory', DEFAULT_AUDITEE_DIRECTORY).then(setAuditeeDirectory);
     fetchMasterData('setup_checklist', DEFAULT_SETUP_ITEMS).then(setSetupItems);
+    fetchMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX).then((saved) => {
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        setMatrixRows(saved);
+      }
+    });
   }, []);
 
   // Sync access users whenever userProfiles from Supabase change
@@ -2070,13 +2181,21 @@ export const MasterDataSetupAccessView: React.FC<{
         name: p.name,
         title: `${p.roleTitle || 'Internal Auditor'} · ${p.department || 'Internal Audit'}`,
         email: p.name.toLowerCase().replace(/\s+/g, '.') + '@bank.com.ph',
-        roles: p.canApproveCAE
-          ? ['System administrator', 'Chief Audit Executive']
-          : p.canApproveHead
-          ? ['Chief Audit Executive']
-          : p.canApproveIndependent
-          ? ['Audit Manager', 'Auditor']
-          : [p.roleTitle || 'Auditor'],
+        roles: (() => {
+          if (p.headerSubtitle) {
+            const role = normalizeRole(p.headerSubtitle);
+            return [role];
+          }
+          if (p.canApproveCAE) return ['Chief Audit Executive'];
+          if (p.canApproveHead) return ['Chief Audit Executive'];
+          if (p.canApproveIndependent) return ['Audit Division Head'];
+          if (p.roleTitle?.toLowerCase().includes('division head')) return ['Audit Division Head'];
+          if (p.roleTitle?.toLowerCase().includes('supervising')) return ['Supervising Auditor'];
+          if (p.roleTitle?.toLowerCase().includes('charge') || p.roleTitle?.toLowerCase().includes('aic')) return ['Audit-in-Charge'];
+          if (p.roleTitle?.toLowerCase().includes('manager')) return ['Audit Division Head'];
+          if (p.roleTitle?.toLowerCase().includes('auditee')) return ['Auditee'];
+          return ['Assisting Auditor'];
+        })(),
         scope: p.department === 'Internal Audit' ? 'Full access' : `${p.department} operations`,
         status: p.accountStatus || 'Active',
         employeeNumber: p.employeeNumber || 'EMP-DB',
@@ -2107,11 +2226,12 @@ export const MasterDataSetupAccessView: React.FC<{
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserEmployeeNo, setNewUserEmployeeNo] = useState('');
-  const [newUserRole, setNewUserRole] = useState('Auditor');
+  const [newUserRole, setNewUserRole] = useState('Assisting Auditor');
   const [newUserScope, setNewUserScope] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserNameError, setNewUserNameError] = useState('');
+  const [newUserFormError, setNewUserFormError] = useState('');
   const [resetTargetId, setResetTargetId] = useState<string | null>(null);
   const [generatedTempPw, setGeneratedTempPw] = useState('');
   const [showTempPw, setShowTempPw] = useState(false);
@@ -2143,6 +2263,23 @@ export const MasterDataSetupAccessView: React.FC<{
     saveMasterData('entity_types', updated);
   };
 
+  const handleStartEditEntityType = (et: string) => {
+    setEditingEntityType(et);
+    setEditingEntityValue(et);
+  };
+
+  const handleSaveEditEntityType = (oldVal: string) => {
+    const trimmed = editingEntityValue.trim();
+    if (!trimmed || trimmed === oldVal) {
+      setEditingEntityType(null);
+      return;
+    }
+    const updated = entityTypes.map((item) => (item === oldVal ? trimmed : item));
+    setEntityTypes(updated);
+    saveMasterData('entity_types', updated);
+    setEditingEntityType(null);
+  };
+
   // ── Handlers: Audit Categories ─────────────────────────────────────────────
   const handleAddAuditCategory = () => {
     if (!newAuditCategory.trim()) return;
@@ -2158,6 +2295,125 @@ export const MasterDataSetupAccessView: React.FC<{
     const updated = auditCategories.filter((item) => item !== cat);
     setAuditCategories(updated);
     saveMasterData('audit_categories', updated);
+  };
+
+  const handleStartEditCategory = (cat: string) => {
+    setEditingCategory(cat);
+    setEditingCategoryValue(cat);
+  };
+
+  const handleSaveEditCategory = (oldVal: string) => {
+    const trimmed = editingCategoryValue.trim();
+    if (!trimmed || trimmed === oldVal) {
+      setEditingCategory(null);
+      return;
+    }
+    const updated = auditCategories.map((item) => (item === oldVal ? trimmed : item));
+    setAuditCategories(updated);
+    saveMasterData('audit_categories', updated);
+    setEditingCategory(null);
+  };
+
+  // ── Handlers: Edit Access Modal ────────────────────────────────────────────
+  const handleOpenEditAccess = (usr: any) => {
+    setEditingAccessUser(usr);
+    setEditFormName(usr.name);
+    setEditFormRole(normalizeRole(usr.roles[0]) || 'Assisting Auditor');
+    setEditFormScope(usr.scope || 'Assigned engagements');
+    setEditFormStatus(usr.status || 'Active');
+    setEditFormEmpNo((usr as any).employeeNumber || '');
+    setEditFormMfa(Boolean((usr as any).mfaEnabled));
+    setEditFormPrivileged(Boolean((usr as any).isPrivileged));
+  };
+
+  const handleSaveEditAccess = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccessUser) return;
+
+    const targetId = editingAccessUser.id;
+    const canApproveHead = editFormRole === 'Chief Audit Executive' || editFormRole === 'System administrator';
+    const canApproveIndependent = editFormRole === 'Audit Division Head' || editFormRole === 'Supervising Auditor';
+    const canApproveCAE = editFormRole === 'Chief Audit Executive';
+
+    setAccessUsers((prev) =>
+      prev.map((item) => {
+        if (item.id !== targetId) return item;
+        return {
+          ...item,
+          name: editFormName.trim() || item.name,
+          roles: [editFormRole],
+          title: `${editFormRole} · Internal Audit`,
+          scope: editFormScope.trim() || item.scope,
+          status: editFormStatus,
+          employeeNumber: editFormEmpNo.trim() || item.employeeNumber,
+          mfaEnabled: editFormMfa,
+          isPrivileged: editFormPrivileged,
+          lastModified: new Date().toISOString().slice(0, 10),
+        } as any;
+      })
+    );
+
+    if (onUpdateUserProfile) {
+      onUpdateUserProfile({
+        id: targetId,
+        name: editFormName.trim() || editingAccessUser.name,
+        roleTitle: `${editFormRole} (Internal Audit)`,
+        fullLabel: `${editFormName.trim() || editingAccessUser.name} – ${editFormRole}`,
+        headerSubtitle: editFormRole,
+        department: 'Internal Audit',
+        canApproveHead,
+        canApproveIndependent,
+        canApproveCAE,
+        accountStatus: editFormStatus === 'Active' ? 'Active' : 'Inactive',
+        employeeNumber: editFormEmpNo.trim() || editingAccessUser.employeeNumber,
+        mfaEnabled: editFormMfa,
+        isPrivileged: editFormPrivileged,
+      });
+    }
+
+    notifyAccess('success', `Access rights and account profile updated for "${editFormName.trim() || editingAccessUser.name}".`);
+    setEditingAccessUser(null);
+  };
+
+  // ── Handlers: Role Permissions Matrix ──────────────────────────────────────
+  const handleMatrixCellChange = (rowIdx: number, field: keyof MatrixRow, val: string) => {
+    setMatrixRows((prev) => {
+      const updated = [...prev];
+      updated[rowIdx] = { ...updated[rowIdx], [field]: val };
+      return updated;
+    });
+  };
+
+  const handleSaveMatrix = () => {
+    saveMasterData('role_permissions_matrix', matrixRows);
+    setIsEditingMatrix(false);
+    notifyAccess('success', 'Role permission matrix successfully saved and updated in system configuration.');
+  };
+
+  const handleResetMatrix = () => {
+    setMatrixRows(DEFAULT_ROLE_PERMISSIONS_MATRIX);
+    saveMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX);
+    setIsEditingMatrix(false);
+    notifyAccess('success', 'Role permission matrix reset to baseline standards.');
+  };
+
+  const handleAddMatrixRow = () => {
+    if (!newMatrixCapability.trim()) return;
+    const newRow: MatrixRow = {
+      capability: newMatrixCapability.trim(),
+      sysAdmin: 'Full',
+      cae: 'Approve',
+      divHead: 'Review',
+      supervising: 'Review',
+      inCharge: 'Lead',
+      assisting: 'Perform',
+      auditee: 'View',
+    };
+    const updated = [...matrixRows, newRow];
+    setMatrixRows(updated);
+    saveMasterData('role_permissions_matrix', updated);
+    setNewMatrixCapability('');
+    notifyAccess('success', `Added new capability "${newMatrixCapability.trim()}" to matrix.`);
   };
 
   // ── Handlers: Auditors List ────────────────────────────────────────────────
@@ -2390,22 +2646,33 @@ export const MasterDataSetupAccessView: React.FC<{
     );
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     setNewUserNameError('');
+    setNewUserFormError('');
     if (!newUserName.trim() || !newUserEmail.trim()) {
-      notifyAccess('error', 'Name and email are required.');
+      const err = 'Full name and email address are required.';
+      setNewUserFormError(err);
+      notifyAccess('error', err);
       return;
     }
     const existingUsernames = accessUsers.map((u) => u.email.split('@')[0]);
     const candidateUsername = newUserEmail.split('@')[0];
     if (isUsernameTaken(candidateUsername, existingUsernames)) {
-      setNewUserNameError(`IA-2: Username "${candidateUsername}" already exists. Each user must have a unique username/ID.`);
+      const err = `IA-2: Username "${candidateUsername}" already exists. Each user must have a unique username/ID.`;
+      setNewUserNameError(err);
+      setNewUserFormError(err);
       return;
     }
     if (newUserPassword) {
-      const { valid, violations } = validatePasswordStrength(newUserPassword, newUserRole === 'System administrator');
+      const isPrivileged = newUserRole === 'System administrator';
+      const { valid, violations } = validatePasswordStrength(newUserPassword, isPrivileged);
       if (!valid) {
-        notifyAccess('error', `PM-1/PM-2: Password does not meet policy: ${violations[0]}`);
+        const hint = !/[^a-zA-Z0-9]/.test(newUserPassword)
+          ? ` (Tip: add a special symbol like "!" or "@" to your password, e.g. ${newUserPassword}!)`
+          : '';
+        const errMsg = `Password does not meet BSP/BSSC policy: ${violations[0]}${hint}`;
+        setNewUserFormError(errMsg);
+        notifyAccess('error', `PM-1/PM-2: ${violations[0]}`);
         return;
       }
     }
@@ -2429,6 +2696,10 @@ export const MasterDataSetupAccessView: React.FC<{
       isPrivileged: newUserRole === 'System administrator',
     };
     setAccessUsers((prev) => [...prev, newAcc as any]);
+    const canApproveHead = newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator';
+    const canApproveIndependent = newUserRole === 'Audit Division Head' || newUserRole === 'Supervising Auditor';
+    const canApproveCAE = newUserRole === 'Chief Audit Executive';
+
     if (onAddUserProfile) {
       onAddUserProfile({
         id: newAcc.id,
@@ -2437,9 +2708,9 @@ export const MasterDataSetupAccessView: React.FC<{
         fullLabel: `${newAcc.name} – ${newUserRole}`,
         headerSubtitle: newUserRole,
         department: 'Internal Audit',
-        canApproveHead: newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator',
-        canApproveIndependent: newUserRole === 'Audit Manager' || newUserRole === 'Auditor',
-        canApproveCAE: newUserRole === 'Chief Audit Executive',
+        canApproveHead,
+        canApproveIndependent,
+        canApproveCAE,
         employeeNumber: newAcc.employeeNumber,
         accountStatus: 'Active',
         failedLoginCount: 0,
@@ -2449,29 +2720,63 @@ export const MasterDataSetupAccessView: React.FC<{
         isPrivileged: newUserRole === 'System administrator',
       });
     }
-    notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created. Temporary password issued. Password change required on first login.`);
+
+    // Also sync to system_users table so user can log in at the root sign-in screen
+    await createOrSyncSystemUser({
+      username: candidateUsername,
+      fullName: newAcc.name,
+      email: newAcc.email,
+      role: newUserRole === 'System administrator' ? 'admin' : 'user',
+      password: newUserPassword || undefined,
+    });
+
+    notifyAccess('success', `IA-1/PM-3: User "${newUserName.trim()}" created with role "${newUserRole}". Temporary password issued.`);
     setNewUserName(''); setNewUserEmail(''); setNewUserEmployeeNo('');
-    setNewUserRole('Auditor'); setNewUserScope(''); setNewUserPassword('');
+    setNewUserRole('Assisting Auditor'); setNewUserScope(''); setNewUserPassword('');
+    setNewUserFormError('');
     setShowAddUserForm(false);
+  };
+
+  const handleUpdateUserRole = (userId: string, newRole: string) => {
+    const normRole = normalizeRole(newRole);
+    setAccessUsers((prev) =>
+      prev.map((item) => {
+        if (item.id !== userId) return item;
+        return {
+          ...item,
+          roles: [normRole],
+          title: `${normRole} · Internal Audit`,
+        } as any;
+      })
+    );
+
+    const targetUser = accessUsers.find((u) => u.id === userId);
+    if (onUpdateUserProfile && targetUser) {
+      const canApproveHead = normRole === 'Chief Audit Executive' || normRole === 'System administrator';
+      const canApproveIndependent = normRole === 'Audit Division Head' || normRole === 'Supervising Auditor';
+      const canApproveCAE = normRole === 'Chief Audit Executive';
+
+      onUpdateUserProfile({
+        id: userId,
+        name: targetUser.name,
+        roleTitle: `${normRole} (Internal Audit)`,
+        fullLabel: `${targetUser.name} – ${normRole}`,
+        headerSubtitle: normRole,
+        department: 'Internal Audit',
+        canApproveHead,
+        canApproveIndependent,
+        canApproveCAE,
+        accountStatus: targetUser.status === 'Active' ? 'Active' : 'Inactive',
+        employeeNumber: (targetUser as any).employeeNumber,
+      });
+    }
+    notifyAccess('success', `Role for "${targetUser?.name || 'User'}" updated to "${normRole}".`);
   };
 
   const getUserExpiryState = (u: any) => {
     return getPasswordExpiryState(u.passwordLastChanged || null, u.mfaEnabled || false);
   };
 
-  const rolePermissionsMatrix = [
-    { capability: 'System Setup, Master Data & Settings', sysAdmin: 'Full', cae: 'Full', manager: 'View', auditor: '—', auditee: '—' },
-    { capability: 'User Accounts & Role Assignments (Access)', sysAdmin: 'Full', cae: 'View', manager: '—', auditor: '—', auditee: '—' },
-    { capability: 'Audit Universe & Inherent Risk Scoring', sysAdmin: 'Full', cae: 'Full', manager: 'Edit', auditor: 'View', auditee: '—' },
-    { capability: 'Annual Audit Plan & Budgeted Hours', sysAdmin: 'Full', cae: 'Approve & Edit', manager: 'Propose & Edit', auditor: 'View', auditee: '—' },
-    { capability: 'Stage 02 Notification & Kickoff Memo', sysAdmin: 'Full', cae: 'Issue & Sign', manager: 'Draft', auditor: 'Draft (assigned)', auditee: 'Receive & Acknowledge' },
-    { capability: 'Stage 03 Working Papers — Prepare & Submit', sysAdmin: 'Full', cae: 'View all', manager: 'Prepare / Reassign', auditor: 'Assigned engagements', auditee: 'Respond to inquiries' },
-    { capability: 'Stage 03 Tier 1 Independent Quality Review', sysAdmin: 'Configure', cae: 'Override', manager: 'Approve / Return', auditor: 'Peer reviewer only', auditee: '—' },
-    { capability: 'Stage 03 Tier 2 Head of Internal Audit Sign-Off', sysAdmin: 'Configure', cae: 'Final Sign-Off', manager: '—', auditor: '—', auditee: '—' },
-    { capability: 'Stage 04 Exit Conference & Management Responses', sysAdmin: 'Full', cae: 'Approve', manager: 'Facilitate', auditor: 'Record minutes', auditee: 'Submit action plan & target date' },
-    { capability: 'Stage 05 Final Audit Report Issuance', sysAdmin: 'Full', cae: 'Approve & Issue', manager: 'Review draft', auditor: 'Compile draft', auditee: 'Read issued report' },
-    { capability: 'Stage 06 Follow-up, Extensions & Issue Closure', sysAdmin: 'Full', cae: 'Close Critical/High', manager: 'Verify & Close', auditor: 'Test remediation', auditee: 'Upload remediation evidence' },
-  ];
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TAB: MASTER DATA
@@ -2487,25 +2792,66 @@ export const MasterDataSetupAccessView: React.FC<{
               Entity types
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Used to classify rows in the Audit Universe. Removing a type does not change existing entities.
+              Used to classify rows in the Audit Universe. Removing or editing a type updates universe options dynamically.
             </p>
 
             <div className="mt-4 divide-y divide-slate-200/80">
-              {entityTypes.map((et) => (
-                <div
-                  key={et}
-                  className="py-2.5 flex items-center justify-between text-[13px] text-slate-900"
-                >
-                  <span>{et}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEntityType(et)}
-                    className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+              {entityTypes.map((et) => {
+                const isEditing = editingEntityType === et;
+                return (
+                  <div
+                    key={et}
+                    className="py-2.5 flex items-center justify-between gap-2 text-[13px] text-slate-900"
                   >
-                    Remove
-                  </button>
-                </div>
-              ))}
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingEntityValue}
+                          onChange={(e) => setEditingEntityValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveEditEntityType(et)}
+                          className="flex-1 px-2.5 py-1 text-xs border border-[#492785] rounded bg-white text-slate-900 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditEntityType(et)}
+                          className="px-2.5 py-1 bg-[#492785] text-white rounded text-xs font-semibold hover:bg-[#3b1f6b] cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingEntityType(null)}
+                          className="px-2 py-1 bg-white border border-slate-300 text-slate-600 rounded text-xs font-medium hover:bg-slate-50 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-medium">{et}</span>
+                        <div className="inline-flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditEntityType(et)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEntityType(et)}
+                            className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="mt-4 flex items-center gap-2">
@@ -2533,25 +2879,66 @@ export const MasterDataSetupAccessView: React.FC<{
               Audit categories
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Used on the Annual Plan and when matching auditors by expertise.
+              Used on the Annual Plan, Audit Universe, and when matching auditors by expertise.
             </p>
 
             <div className="mt-4 divide-y divide-slate-200/80">
-              {auditCategories.map((cat) => (
-                <div
-                  key={cat}
-                  className="py-2.5 flex items-center justify-between text-[13px] text-slate-900"
-                >
-                  <span>{cat}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAuditCategory(cat)}
-                    className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+              {auditCategories.map((cat) => {
+                const isEditing = editingCategory === cat;
+                return (
+                  <div
+                    key={cat}
+                    className="py-2.5 flex items-center justify-between gap-2 text-[13px] text-slate-900"
                   >
-                    Remove
-                  </button>
-                </div>
-              ))}
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingCategoryValue}
+                          onChange={(e) => setEditingCategoryValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveEditCategory(cat)}
+                          className="flex-1 px-2.5 py-1 text-xs border border-[#492785] rounded bg-white text-slate-900 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditCategory(cat)}
+                          className="px-2.5 py-1 bg-[#492785] text-white rounded text-xs font-semibold hover:bg-[#3b1f6b] cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCategory(null)}
+                          className="px-2 py-1 bg-white border border-slate-300 text-slate-600 rounded text-xs font-medium hover:bg-slate-50 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-medium">{cat}</span>
+                        <div className="inline-flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditCategory(cat)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAuditCategory(cat)}
+                            className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="mt-4 flex items-center gap-2">
@@ -2594,6 +2981,42 @@ export const MasterDataSetupAccessView: React.FC<{
             </button>
           </div>
 
+          {/* Search bar for auditors */}
+          <div className="mt-4 flex items-center gap-2">
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                value={auditorSearch}
+                onChange={(e) => setAuditorSearch(e.target.value)}
+                placeholder="Search auditors by name, role, email, or specialisations..."
+                className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-[#492785]"
+              />
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+              {auditorSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAuditorSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {auditorSearch && (
+              <span className="text-xs text-slate-500">
+                Found {auditorsList.filter((a) => {
+                  const q = auditorSearch.toLowerCase();
+                  return (
+                    a.name.toLowerCase().includes(q) ||
+                    a.role.toLowerCase().includes(q) ||
+                    a.email.toLowerCase().includes(q) ||
+                    a.skills.toLowerCase().includes(q)
+                  );
+                }).length} auditor(s)
+              </span>
+            )}
+          </div>
+
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left border-collapse text-[13px]">
               <thead>
@@ -2606,7 +3029,18 @@ export const MasterDataSetupAccessView: React.FC<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/80">
-                {auditorsList.map((aud) => (
+                {auditorsList
+                  .filter((aud) => {
+                    if (!auditorSearch.trim()) return true;
+                    const q = auditorSearch.toLowerCase();
+                    return (
+                      aud.name.toLowerCase().includes(q) ||
+                      aud.role.toLowerCase().includes(q) ||
+                      aud.email.toLowerCase().includes(q) ||
+                      aud.skills.toLowerCase().includes(q)
+                    );
+                  })
+                  .map((aud) => (
                   <tr key={aud.email} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 pr-4 font-bold text-slate-900">{aud.name}</td>
                     <td className="py-3 px-4 text-slate-700">{aud.role}</td>
@@ -2632,10 +3066,19 @@ export const MasterDataSetupAccessView: React.FC<{
                     </td>
                   </tr>
                 ))}
-                {auditorsList.length === 0 && (
+                {auditorsList.filter((aud) => {
+                  if (!auditorSearch.trim()) return true;
+                  const q = auditorSearch.toLowerCase();
+                  return (
+                    aud.name.toLowerCase().includes(q) ||
+                    aud.role.toLowerCase().includes(q) ||
+                    aud.email.toLowerCase().includes(q) ||
+                    aud.skills.toLowerCase().includes(q)
+                  );
+                }).length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-xs text-slate-500">
-                      No internal auditors registered. Click &ldquo;+ Add auditor&rdquo; to register team members.
+                      {auditorSearch ? 'No auditors match your search query.' : 'No internal auditors registered.'}
                     </td>
                   </tr>
                 )}
@@ -3259,81 +3702,236 @@ export const MasterDataSetupAccessView: React.FC<{
         {/* Add user form */}
         {showAddUserForm && (
           <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-            <div className="text-xs font-bold text-slate-900 mb-1">New user account — IA-1 / IA-2 / PM-3 / PM-4</div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-900">New user account — IA-1 / IA-2 / PM-3 / PM-4</div>
+              <span className="text-[11px] text-slate-500">All fields with * are required</span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-slate-600 mb-1">Full name *</label>
-                <input type="text" autoComplete="off" value={newUserName} onChange={(e) => setNewUserName(e.target.value)}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Full name *</label>
+                <input type="text" autoComplete="off" value={newUserName}
+                  onChange={(e) => { setNewUserName(e.target.value); setNewUserFormError(''); }}
                   placeholder="e.g. S. Magsaysay"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-600 mb-1">Email / UPN * <span className="text-slate-400">(becomes username)</span></label>
-                <input type="email" autoComplete="off" value={newUserEmail} onChange={(e) => { setNewUserEmail(e.target.value); setNewUserNameError(''); }}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Email / UPN * <span className="text-slate-400 font-normal">(becomes username)</span></label>
+                <input type="email" autoComplete="off" value={newUserEmail}
+                  onChange={(e) => { setNewUserEmail(e.target.value); setNewUserNameError(''); setNewUserFormError(''); }}
                   placeholder="s.magsaysay@bank.com.ph"
-                  className={`w-full px-3 py-2 bg-white border rounded-md text-xs text-slate-800 ${newUserNameError ? 'border-red-400' : 'border-slate-300'}`} />
-                {newUserNameError && <div className="text-xs text-red-700 mt-1">{newUserNameError}</div>}
+                  className={`w-full px-3 py-2 bg-white border rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785] ${newUserNameError ? 'border-red-400 bg-red-50/30' : 'border-slate-300'}`} />
+                {newUserNameError && <div className="text-xs text-red-700 mt-1 font-medium">{newUserNameError}</div>}
               </div>
               <div>
-                <label className="block text-xs text-slate-600 mb-1">Employee number</label>
-                <input type="text" autoComplete="off" value={newUserEmployeeNo} onChange={(e) => setNewUserEmployeeNo(e.target.value)}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Employee number</label>
+                <input type="text" autoComplete="off" value={newUserEmployeeNo}
+                  onChange={(e) => { setNewUserEmployeeNo(e.target.value); setNewUserFormError(''); }}
                   placeholder="EMP-XXX"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-600 mb-1">Role</label>
-                <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800">
-                  {['System administrator','Chief Audit Executive','Audit Manager','Auditor','Auditee'].map((r) => (
+                <label className="block text-xs font-medium text-slate-700 mb-1">Role</label>
+                <select value={newUserRole}
+                  onChange={(e) => { setNewUserRole(e.target.value); setNewUserFormError(''); }}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785]">
+                  {APP_ROLES.map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-600 mb-1">Scope</label>
-                <input type="text" autoComplete="off" value={newUserScope} onChange={(e) => setNewUserScope(e.target.value)}
+                <label className="block text-xs font-medium text-slate-700 mb-1">Scope</label>
+                <input type="text" autoComplete="off" value={newUserScope}
+                  onChange={(e) => { setNewUserScope(e.target.value); setNewUserFormError(''); }}
                   placeholder="Assigned engagements"
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800" />
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-600 mb-1">
-                  Initial password <span className="text-slate-400">(PM-4: leave blank for auto-generated)</span>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Initial password <span className="text-slate-400 font-normal">(PM-4: leave blank for auto-generated)</span>
                 </label>
                 <div className="relative">
                   <input type={showNewUserPassword ? 'text' : 'password'} autoComplete="new-password"
-                    value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)}
+                    value={newUserPassword}
+                    onChange={(e) => { setNewUserPassword(e.target.value); setNewUserFormError(''); }}
                     placeholder="Auto-generated if empty"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-800 pr-10" />
+                    className={`w-full px-3 py-2 bg-white border rounded-md text-xs text-slate-800 pr-10 focus:outline-none focus:ring-1 focus:ring-[#492785] ${newUserFormError && newUserPassword ? 'border-red-400' : 'border-slate-300'}`} />
                   <button type="button" onClick={() => setShowNewUserPassword((p) => !p)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer text-[11px]">
                     {showNewUserPassword ? '🙈' : '👁️'}
                   </button>
                 </div>
+                {!newUserPassword && (
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Tip: If left blank, a compliant 14-character temporary password will be auto-generated.
+                  </p>
+                )}
                 {newUserPassword && (() => {
+                  const isPriv = newUserRole === 'System administrator';
                   const score = scorePasswordStrength(newUserPassword);
+                  const { valid } = validatePasswordStrength(newUserPassword, isPriv);
+                  const hasMinLen = newUserPassword.length >= (isPriv ? 12 : 8);
+                  const hasLetter = /[a-zA-Z]/.test(newUserPassword);
+                  const hasNumber = /[0-9]/.test(newUserPassword);
+                  const hasSpecial = /[^a-zA-Z0-9]/.test(newUserPassword);
+
                   return (
-                    <div className="mt-1.5">
+                    <div className="mt-1.5 space-y-1">
                       <div className="flex gap-0.5">
                         {[0,1,2,3,4].map((i) => (
                           <div key={i} className={`h-1 flex-1 rounded-full ${i <= score ? PASSWORD_STRENGTH_COLORS[score] : 'bg-slate-200'}`} />
                         ))}
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        PM-13: Strength — <strong>{PASSWORD_STRENGTH_LABELS[score]}</strong>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>PM-13: Strength — <strong>{PASSWORD_STRENGTH_LABELS[score]}</strong></span>
+                        <span className={valid ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-medium'}>
+                          {valid ? '✓ Policy met' : 'Policy requirement missing'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] pt-0.5">
+                        <span className={hasMinLen ? 'text-emerald-700 font-medium' : 'text-slate-400'}>
+                          {hasMinLen ? '✓' : '•'} {isPriv ? '12+ chars' : '8+ chars'}
+                        </span>
+                        <span className={hasLetter ? 'text-emerald-700 font-medium' : 'text-slate-400'}>
+                          {hasLetter ? '✓' : '•'} Letters
+                        </span>
+                        <span className={hasNumber ? 'text-emerald-700 font-medium' : 'text-slate-400'}>
+                          {hasNumber ? '✓' : '•'} Numbers
+                        </span>
+                        <span className={hasSpecial ? 'text-emerald-700 font-medium' : 'text-red-600 font-bold'}>
+                          {hasSpecial ? '✓ Special symbol' : '✗ Symbol (!@#$%^&*)'}
+                        </span>
                       </div>
                     </div>
                   );
                 })()}
               </div>
             </div>
-            <button type="button" onClick={handleAddUser}
-              className="px-4 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer">
-              Create account
-            </button>
+
+            {/* Inline validation error display right above the button */}
+            {newUserFormError && (
+              <div className="p-3 bg-red-50 border border-red-300 rounded-md text-xs text-red-900 font-medium flex items-start gap-2.5 shadow-2xs">
+                <span className="text-red-600 font-bold text-sm shrink-0 leading-none mt-0.5">⚠️</span>
+                <div className="flex-1">
+                  <div className="font-bold text-red-900 mb-0.5">Cannot create account</div>
+                  <div className="text-red-800 text-[11px] leading-relaxed">{newUserFormError}</div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button type="button" onClick={handleAddUser}
+                className="px-4 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer shadow-xs transition-colors">
+                Create account
+              </button>
+              <button type="button" onClick={() => { setShowAddUserForm(false); setNewUserFormError(''); }}
+                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-medium rounded-md cursor-pointer">
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
-        <div className="mt-5 overflow-x-auto">
+        {/* Search & Filter Bar */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-md">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            <div className="relative flex-1 min-w-[220px] max-w-sm">
+              <input
+                type="text"
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                placeholder="Search by name, email, employee #, scope..."
+                className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#492785]"
+              />
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+              {userSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setUserSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Role:</span>
+              <select
+                value={userRoleFilter}
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+                className="px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
+              >
+                <option value="All roles">All roles</option>
+                {APP_ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Status:</span>
+              <select
+                value={userStatusFilter}
+                onChange={(e) => setUserStatusFilter(e.target.value)}
+                className="px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
+              >
+                <option value="All statuses">All statuses</option>
+                <option value="Active">Active</option>
+                <option value="Suspended">Suspended</option>
+                <option value="Locked">Locked</option>
+                <option value="Privileged">Privileged (IA-11)</option>
+                <option value="MFA">MFA Enabled</option>
+              </select>
+            </div>
+
+            {(userSearchQuery || userRoleFilter !== 'All roles' || userStatusFilter !== 'All statuses') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUserSearchQuery('');
+                  setUserRoleFilter('All roles');
+                  setUserStatusFilter('All statuses');
+                }}
+                className="text-xs text-[#492785] hover:underline font-semibold cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="text-[11px] font-mono-tabular text-slate-500">
+            Showing {
+              accessUsers.filter((usr) => {
+                if (userSearchQuery.trim()) {
+                  const q = userSearchQuery.toLowerCase();
+                  const matches =
+                    usr.name.toLowerCase().includes(q) ||
+                    usr.email.toLowerCase().includes(q) ||
+                    ((usr as any).employeeNumber && (usr as any).employeeNumber.toLowerCase().includes(q)) ||
+                    (usr.scope && usr.scope.toLowerCase().includes(q)) ||
+                    usr.roles.some((r: string) => r.toLowerCase().includes(q));
+                  if (!matches) return false;
+                }
+                if (userRoleFilter !== 'All roles') {
+                  const normTarget = normalizeRole(userRoleFilter);
+                  const hasRole = usr.roles.some((r: string) => normalizeRole(r) === normTarget);
+                  if (!hasRole) return false;
+                }
+                if (userStatusFilter !== 'All statuses') {
+                  if (userStatusFilter === 'Active' && usr.status !== 'Active') return false;
+                  if (userStatusFilter === 'Suspended' && usr.status !== 'Suspended') return false;
+                  if (userStatusFilter === 'Locked' && !(usr as any).isLocked) return false;
+                  if (userStatusFilter === 'Privileged' && !(usr as any).isPrivileged) return false;
+                  if (userStatusFilter === 'MFA' && !(usr as any).mfaEnabled) return false;
+                }
+                return true;
+              }).length
+            } of {accessUsers.length} accounts
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -3347,7 +3945,33 @@ export const MasterDataSetupAccessView: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80 text-[12px]">
-              {accessUsers.map((usr) => {
+              {accessUsers
+                .filter((usr) => {
+                  if (userSearchQuery.trim()) {
+                    const q = userSearchQuery.toLowerCase();
+                    const matches =
+                      usr.name.toLowerCase().includes(q) ||
+                      usr.email.toLowerCase().includes(q) ||
+                      ((usr as any).employeeNumber && (usr as any).employeeNumber.toLowerCase().includes(q)) ||
+                      (usr.scope && usr.scope.toLowerCase().includes(q)) ||
+                      usr.roles.some((r: string) => r.toLowerCase().includes(q));
+                    if (!matches) return false;
+                  }
+                  if (userRoleFilter !== 'All roles') {
+                    const normTarget = normalizeRole(userRoleFilter);
+                    const hasRole = usr.roles.some((r: string) => normalizeRole(r) === normTarget);
+                    if (!hasRole) return false;
+                  }
+                  if (userStatusFilter !== 'All statuses') {
+                    if (userStatusFilter === 'Active' && usr.status !== 'Active') return false;
+                    if (userStatusFilter === 'Suspended' && usr.status !== 'Suspended') return false;
+                    if (userStatusFilter === 'Locked' && !(usr as any).isLocked) return false;
+                    if (userStatusFilter === 'Privileged' && !(usr as any).isPrivileged) return false;
+                    if (userStatusFilter === 'MFA' && !(usr as any).mfaEnabled) return false;
+                  }
+                  return true;
+                })
+                .map((usr) => {
                 const isLocked = (usr as any).isLocked || false;
                 const failedCount = (usr as any).failedLoginCount || 0;
                 const requiresPwChange = (usr as any).requiresPasswordChange || false;
@@ -3372,15 +3996,34 @@ export const MasterDataSetupAccessView: React.FC<{
                     </td>
                     <td className="py-3 px-3 font-mono-tabular text-[11px] text-slate-700">{usr.email}</td>
                     <td className="py-3 px-3">
-                      <div className="flex flex-wrap gap-1">
-                        {usr.roles.map((r) => (
-                          <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                            r === 'System administrator' || r === 'Chief Audit Executive'
-                              ? 'bg-[#E4DDF8] text-[#492785]'
-                              : r === 'Audit Manager' ? 'bg-[#DCE8FB] text-[#1D4ED8]'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}>{r}</span>
-                        ))}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {usr.roles.map((r) => {
+                          const norm = normalizeRole(r);
+                          return (
+                            <span key={r} className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              norm === 'System administrator' || norm === 'Chief Audit Executive'
+                                ? 'bg-[#E4DDF8] text-[#492785]'
+                                : norm === 'Audit Division Head'
+                                ? 'bg-[#DCE8FB] text-[#1D4ED8]'
+                                : norm === 'Supervising Auditor'
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                : norm === 'Audit-in-Charge'
+                                ? 'bg-teal-50 text-teal-800 border border-teal-200'
+                                : norm === 'Assisting Auditor'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}>{norm}</span>
+                          );
+                        })}
+                        <select
+                          value={normalizeRole(usr.roles[0])}
+                          onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
+                          className="text-[10px] bg-white border border-slate-300 rounded px-1.5 py-0.5 text-slate-700 hover:border-[#492785] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#492785]"
+                          title="Change assigned role">
+                          {APP_ROLES.map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
                         {mfaOn && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">MFA ✓</span>}
                       </div>
                     </td>
@@ -3439,7 +4082,12 @@ export const MasterDataSetupAccessView: React.FC<{
                           </button>
                         )}
                         <button type="button"
-                          onClick={() => { const found = userProfiles.find((u: UserProfile) => u.name === usr.name); if (found) { onChangeUser(found); } else { onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: usr.roles.join(', '), department: usr.title, canApproveHead: usr.roles.includes('Chief Audit Executive'), canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'), canApproveCAE: usr.roles.includes('Chief Audit Executive') }); } }}
+                          onClick={() => handleOpenEditAccess(usr)}
+                          className="px-2 py-1 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded text-[10px] font-semibold cursor-pointer whitespace-nowrap">
+                          Edit access
+                        </button>
+                        <button type="button"
+                          onClick={() => { const found = userProfiles.find((u: UserProfile) => u.name === usr.name); if (found) { onChangeUser(found); } else { const normR = normalizeRole(usr.roles[0]); onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: normR, department: usr.title, canApproveHead: normR === 'Chief Audit Executive' || normR === 'System administrator', canApproveIndependent: normR === 'Audit Division Head' || normR === 'Supervising Auditor', canApproveCAE: normR === 'Chief Audit Executive' }); } }}
                           className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
                           Impersonate
                         </button>
@@ -3454,17 +4102,18 @@ export const MasterDataSetupAccessView: React.FC<{
                               prev.map((item) => {
                                 if (item.id !== usr.id) return item;
                                 const nextStatus = item.status === 'Active' ? 'Suspended' : 'Active';
+                                const normR = normalizeRole(usr.roles[0]);
                                 if (onUpdateUserProfile) {
                                   onUpdateUserProfile({
                                     id: usr.id,
                                     name: usr.name,
                                     roleTitle: usr.title,
-                                    fullLabel: `${usr.name} — ${usr.roles.join(', ')}`,
-                                    headerSubtitle: usr.roles.join(', '),
+                                    fullLabel: `${usr.name} – ${normR}`,
+                                    headerSubtitle: normR,
                                     department: 'Internal Audit',
-                                    canApproveHead: usr.roles.includes('Chief Audit Executive'),
-                                    canApproveIndependent: usr.roles.includes('Audit Manager') || usr.roles.includes('Auditor'),
-                                    canApproveCAE: usr.roles.includes('Chief Audit Executive'),
+                                    canApproveHead: normR === 'Chief Audit Executive' || normR === 'System administrator',
+                                    canApproveIndependent: normR === 'Audit Division Head' || normR === 'Supervising Auditor',
+                                    canApproveCAE: normR === 'Chief Audit Executive',
                                     accountStatus: nextStatus === 'Active' ? 'Active' : 'Inactive',
                                   });
                                 }
@@ -3490,9 +4139,185 @@ export const MasterDataSetupAccessView: React.FC<{
                   </tr>
                 );
               })}
+              {accessUsers.filter((usr) => {
+                if (userSearchQuery.trim()) {
+                  const q = userSearchQuery.toLowerCase();
+                  const matches =
+                    usr.name.toLowerCase().includes(q) ||
+                    usr.email.toLowerCase().includes(q) ||
+                    ((usr as any).employeeNumber && (usr as any).employeeNumber.toLowerCase().includes(q)) ||
+                    (usr.scope && usr.scope.toLowerCase().includes(q)) ||
+                    usr.roles.some((r: string) => r.toLowerCase().includes(q));
+                  if (!matches) return false;
+                }
+                if (userRoleFilter !== 'All roles') {
+                  const normTarget = normalizeRole(userRoleFilter);
+                  const hasRole = usr.roles.some((r: string) => normalizeRole(r) === normTarget);
+                  if (!hasRole) return false;
+                }
+                if (userStatusFilter !== 'All statuses') {
+                  if (userStatusFilter === 'Active' && usr.status !== 'Active') return false;
+                  if (userStatusFilter === 'Suspended' && usr.status !== 'Suspended') return false;
+                  if (userStatusFilter === 'Locked' && !(usr as any).isLocked) return false;
+                  if (userStatusFilter === 'Privileged' && !(usr as any).isPrivileged) return false;
+                  if (userStatusFilter === 'MFA' && !(usr as any).mfaEnabled) return false;
+                }
+                return true;
+              }).length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-xs text-slate-500">
+                    No user accounts match the selected filters or search query.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Modal: Edit Access Rights & Account Settings */}
+        {editingAccessUser && (
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-6 text-xs">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Edit Access Rights &amp; User Profile
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Configure role assignments, operational scope, MFA requirement, and account status (LAC-1 / LAC-3).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingAccessUser(null)}
+                  className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditAccess} className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormName}
+                      onChange={(e) => setEditFormName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Employee Number
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormEmpNo}
+                      onChange={(e) => setEditFormEmpNo(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Internal Audit Role *
+                  </label>
+                  <select
+                    value={editFormRole}
+                    onChange={(e) => setEditFormRole(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 bg-white focus:outline-none focus:border-[#492785]"
+                  >
+                    {APP_ROLES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {editFormRole === 'Chief Audit Executive' && 'Full executive authority: Stage 02 memo sign-off, Tier 2 QA review, final report issuance, and issue closure.'}
+                    {editFormRole === 'Audit Division Head' && 'Review sign-off authority: independent quality review (Tier 1), report review, and issue verification.'}
+                    {editFormRole === 'Supervising Auditor' && 'Fieldwork supervisory review authority: reviewer notes and engagement recommendation.'}
+                    {editFormRole === 'Audit-in-Charge' && 'Engagement lead: prepare working papers, coordinate exit conferences, compile report drafts.'}
+                    {editFormRole === 'Assisting Auditor' && 'Audit fieldwork executor: prepare assigned working notes and execute audit test steps.'}
+                    {editFormRole === 'System administrator' && 'Platform setup, master data configuration, user access management, and security policy.'}
+                    {editFormRole === 'Auditee' && 'Business unit recipient: receive kickoff notices, review findings, and upload remediation evidence.'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Operational Scope
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormScope}
+                    onChange={(e) => setEditFormScope(e.target.value)}
+                    placeholder="e.g. Assigned engagements, Full access, IT operations"
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Account Status
+                  </label>
+                  <select
+                    value={editFormStatus}
+                    onChange={(e) => setEditFormStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 bg-white focus:outline-none focus:border-[#492785]"
+                  >
+                    <option value="Active">Active (Permitted to log in)</option>
+                    <option value="Suspended">Suspended (Access temporarily revoked)</option>
+                  </select>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editFormMfa}
+                      onChange={(e) => setEditFormMfa(e.target.checked)}
+                      className="rounded text-[#492785] focus:ring-[#492785]"
+                    />
+                    <span className="font-semibold text-slate-800 text-xs">
+                      Enforce Multi-Factor Authentication (MFA / 2FA)
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editFormPrivileged}
+                      onChange={(e) => setEditFormPrivileged(e.target.checked)}
+                      className="rounded text-[#492785] focus:ring-[#492785]"
+                    />
+                    <span className="font-semibold text-slate-800 text-xs">
+                      IA-11 Privileged Account (Registers in OCISO Assessment Ledger)
+                    </span>
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAccessUser(null)}
+                    className="px-3.5 py-1.5 border border-slate-300 rounded-md font-semibold text-slate-700 cursor-pointer hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* PM-10: Password reset token modal */}
         {resetTargetId && (
@@ -3603,33 +4428,199 @@ export const MasterDataSetupAccessView: React.FC<{
         </div>
       </div>
 
-      {/* ── Role permission matrix ───────────────────────────────────────── */}
+      {/* ── Role permission matrix (Configurable) ───────────────────────── */}
       <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-5">
-        <h2 className="text-[16px] font-bold text-slate-900 mb-0.5">Role permission matrix</h2>
-        <p className="text-xs text-slate-500 mb-4">
-          Capabilities enforced per role across the 6-stage audit lifecycle. Permissions are assigned to roles — never directly to individual users (LAC-1 default-deny policy).
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[16px] font-bold text-slate-900">Role permission matrix</h2>
+              <span className="text-[10px] font-bold bg-[#E4DDF8] text-[#492785] px-2 py-0.5 rounded-full">
+                {isEditingMatrix ? 'Editing Mode' : 'Configured & Active'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Capabilities enforced per role across the 6-stage audit lifecycle. Permissions are assigned to roles (LAC-1 default-deny policy).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!isEditingMatrix ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingMatrix(true)}
+                className="px-3.5 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer transition-colors"
+              >
+                ⚙️ Configure matrix
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSaveMatrix}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md cursor-pointer transition-colors"
+                >
+                  ✓ Save matrix
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetMatrix}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium rounded-md cursor-pointer transition-colors"
+                >
+                  Reset defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingMatrix(false)}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium rounded-md cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {isEditingMatrix && (
+          <div className="mb-4 p-3 bg-purple-50/50 border border-purple-200 rounded-md flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-[#492785]">Add custom capability:</span>
+            <input
+              type="text"
+              value={newMatrixCapability}
+              onChange={(e) => setNewMatrixCapability(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddMatrixRow()}
+              placeholder="e.g. Stage 07 Continuous Monitoring & Analytics"
+              className="flex-1 min-w-[240px] px-2.5 py-1 text-xs bg-white border border-slate-300 rounded focus:outline-none focus:border-[#492785]"
+            />
+            <button
+              type="button"
+              onClick={handleAddMatrixRow}
+              className="px-3 py-1 bg-[#492785] text-white text-xs font-semibold rounded cursor-pointer"
+            >
+              + Add Row
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-[12px]">
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                <th className="py-2.5 pr-4">CAPABILITY / LIFECYCLE STAGE</th>
-                <th className="py-2.5 px-4">SYSTEM ADMIN</th>
-                <th className="py-2.5 px-4">CAE</th>
-                <th className="py-2.5 px-4">AUDIT MANAGER</th>
-                <th className="py-2.5 px-4">AUDITOR</th>
-                <th className="py-2.5 pl-4">AUDITEE</th>
+                <th className="py-2.5 pr-3 min-w-[200px]">CAPABILITY / LIFECYCLE STAGE</th>
+                <th className="py-2.5 px-2">SYSTEM ADMIN</th>
+                <th className="py-2.5 px-2">CAE</th>
+                <th className="py-2.5 px-2">AUDIT DIVISION HEAD</th>
+                <th className="py-2.5 px-2">SUPERVISING AUDITOR</th>
+                <th className="py-2.5 px-2">AUDIT-IN-CHARGE</th>
+                <th className="py-2.5 px-2">ASSISTING AUDITOR</th>
+                <th className="py-2.5 pl-2">AUDITEE</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80">
-              {rolePermissionsMatrix.map((row) => (
-                <tr key={row.capability} className="hover:bg-slate-50/40">
-                  <td className="py-2.5 pr-4 font-bold text-slate-900">{row.capability}</td>
-                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.sysAdmin}</td>
-                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.cae}</td>
-                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.manager}</td>
-                  <td className="py-2.5 px-4 text-xs text-slate-700">{row.auditor}</td>
-                  <td className="py-2.5 pl-4 text-xs text-slate-700">{row.auditee}</td>
+              {matrixRows.map((row, rIdx) => (
+                <tr key={row.capability + rIdx} className="hover:bg-slate-50/40">
+                  <td className="py-2.5 pr-3 font-semibold text-slate-900 text-[11.5px]">
+                    {row.capability}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.sysAdmin}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'sysAdmin', e.target.value)}
+                        className="w-24 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                        row.sysAdmin === 'Full' ? 'bg-purple-100 text-purple-900' : 'text-slate-700'
+                      }`}>
+                        {row.sysAdmin}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.cae}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'cae', e.target.value)}
+                        className="w-24 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                        row.cae.includes('Approve') || row.cae.includes('Sign') || row.cae === 'Full'
+                          ? 'bg-[#E4DDF8] text-[#492785] font-semibold'
+                          : 'text-slate-700'
+                      }`}>
+                        {row.cae}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.divHead}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'divHead', e.target.value)}
+                        className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                        row.divHead.includes('Approve') || row.divHead.includes('Review')
+                          ? 'bg-blue-50 text-blue-800 font-semibold'
+                          : 'text-slate-700'
+                      }`}>
+                        {row.divHead}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.supervising}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'supervising', e.target.value)}
+                        className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-700">{row.supervising}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.inCharge}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'inCharge', e.target.value)}
+                        className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-700">{row.inCharge}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.assisting}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'assisting', e.target.value)}
+                        className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-700">{row.assisting}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 pl-2">
+                    {isEditingMatrix ? (
+                      <input
+                        type="text"
+                        value={row.auditee}
+                        onChange={(e) => handleMatrixCellChange(rIdx, 'auditee', e.target.value)}
+                        className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-600">{row.auditee}</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

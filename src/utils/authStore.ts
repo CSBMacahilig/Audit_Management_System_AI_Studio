@@ -161,20 +161,68 @@ export async function seedDefaultAdmin(): Promise<void> {
 
 export async function login(username: string, password: string): Promise<LoginResult> {
   const GENERIC = 'Login failed. Invalid user ID or password.';
+  const rawInput = username.trim();
+  const clean = rawInput.toLowerCase();
+  const emailPrefix = clean.includes('@') ? clean.split('@')[0] : clean;
+  const attemptedHash = await hashPassword(password);
 
-  const { data: row, error } = await supabase
-    .from('system_users')
-    .select('*')
-    .eq('username', username.trim().toLowerCase())
-    .maybeSingle();
+  // 1. Fetch system_users and user_profiles to support multi-identifier resolution
+  const [{ data: suList, error: suErr }, { data: profiles }] = await Promise.all([
+    supabase.from('system_users').select('*'),
+    supabase.from('user_profiles').select('*'),
+  ]);
 
-  if (error || !row) return { success: false, error: GENERIC };
+  if (suErr || !suList || suList.length === 0) {
+    return { success: false, error: GENERIC };
+  }
 
-  const user = rowToUser(row);
+  // 2. Identify candidates matching username, email, full_name, or employee_number
+  const candidates: SystemUser[] = [];
 
-  if (!user.isActive) return { success: false, error: GENERIC };
+  for (const row of suList) {
+    const u = rowToUser(row);
+    let isMatch = false;
 
-  if (user.isLocked) {
+    // Check direct username / email / full_name matches
+    if (u.username.toLowerCase() === clean) isMatch = true;
+    else if (u.email && u.email.toLowerCase() === clean) isMatch = true;
+    else if (u.username.toLowerCase() === emailPrefix) isMatch = true;
+    else if (u.fullName && u.fullName.toLowerCase() === clean) isMatch = true;
+    else if (u.fullName && u.fullName.toLowerCase().replace(/\s+/g, '') === clean.replace(/\s+/g, '')) isMatch = true;
+
+    // Check employee_number in user_profiles
+    if (!isMatch && profiles) {
+      const matchedProfile = profiles.find(
+        (p: any) => p.employee_number && p.employee_number.toLowerCase() === clean
+      );
+      if (
+        matchedProfile &&
+        ((u.fullName && u.fullName.toLowerCase() === matchedProfile.name.toLowerCase()) ||
+          u.username.toLowerCase() === matchedProfile.name.toLowerCase().replace(/\s+/g, '.') ||
+          (matchedProfile.employee_number && u.username.toLowerCase().includes(matchedProfile.employee_number.toLowerCase())))
+      ) {
+        isMatch = true;
+      }
+    }
+
+    if (isMatch) candidates.push(u);
+  }
+
+  if (candidates.length === 0) {
+    return { success: false, error: GENERIC };
+  }
+
+  // 3. Find candidate with matching password hash
+  let targetUser = candidates.find((c) => c.passwordHash === attemptedHash);
+
+  // If no password matched, select candidate for failed attempt tracking
+  if (!targetUser) {
+    targetUser = candidates[0];
+  }
+
+  if (!targetUser.isActive) return { success: false, error: GENERIC };
+
+  if (targetUser.isLocked) {
     return {
       success: false,
       locked: true,
@@ -184,15 +232,13 @@ export async function login(username: string, password: string): Promise<LoginRe
     };
   }
 
-  const attemptedHash = await hashPassword(password);
-
-  if (attemptedHash !== user.passwordHash) {
-    const newCount = user.failedLoginCount + 1;
+  if (attemptedHash !== targetUser.passwordHash) {
+    const newCount = targetUser.failedLoginCount + 1;
     const shouldLock = newCount >= MAX_FAILED;
     await supabase
       .from('system_users')
       .update({ failed_login_count: newCount, is_locked: shouldLock, modified_at: new Date().toISOString() })
-      .eq('id', user.id);
+      .eq('id', targetUser.id);
 
     if (shouldLock) {
       return {
@@ -212,22 +258,22 @@ export async function login(username: string, password: string): Promise<LoginRe
   await supabase
     .from('system_users')
     .update({ failed_login_count: 0, is_locked: false, last_login: now, modified_at: now })
-    .eq('id', user.id);
+    .eq('id', targetUser.id);
 
   clearSession();
 
   const session: AuthSession = {
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    fullName: user.fullName,
+    userId: targetUser.id,
+    username: targetUser.username,
+    role: targetUser.role,
+    fullName: targetUser.fullName,
     token,
     issuedAt: now,
-    requiresPasswordChange: user.requiresPasswordChange,
+    requiresPasswordChange: targetUser.requiresPasswordChange,
   };
   saveSession(session);
 
-  return { success: true, session, requiresPasswordChange: user.requiresPasswordChange };
+  return { success: true, session, requiresPasswordChange: targetUser.requiresPasswordChange };
 }
 
 export function logout(): void {
@@ -377,4 +423,67 @@ export async function changeOwnPassword(
   const updatedSession: AuthSession = { ...session, requiresPasswordChange: false };
   saveSession(updatedSession);
   return { success: true };
+}
+
+/**
+ * Creates or synchronizes a user record in `system_users` table so they can authenticate
+ * through the root sign-in screen using either their username or email address.
+ */
+export async function createOrSyncSystemUser(data: {
+  username: string;
+  fullName: string;
+  email: string;
+  role: SystemRole;
+  password?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const uname = data.username.trim().toLowerCase();
+    const mail = data.email.trim().toLowerCase();
+    const pwd = data.password || 'Bank@2026!';
+    const hash = await hashPassword(pwd);
+    const now = new Date().toISOString();
+
+    const { data: existing } = await supabase
+      .from('system_users')
+      .select('id')
+      .or(`username.eq.${uname},email.eq.${mail}`)
+      .maybeSingle();
+
+    if (existing) {
+      const { error: updErr } = await supabase
+        .from('system_users')
+        .update({
+          full_name: data.fullName.trim(),
+          role: data.role,
+          password_hash: hash,
+          is_active: true,
+          is_locked: false,
+          requires_password_change: true,
+          modified_at: now,
+        })
+        .eq('id', existing.id);
+      if (updErr) return { success: false, error: updErr.message };
+      return { success: true };
+    } else {
+      const { error: insErr } = await supabase.from('system_users').insert({
+        id: `usr-${Date.now()}`,
+        username: uname,
+        full_name: data.fullName.trim(),
+        email: mail,
+        role: data.role,
+        password_hash: hash,
+        is_active: true,
+        is_locked: false,
+        failed_login_count: 0,
+        requires_password_change: true,
+        created_at: now,
+        last_login: null,
+        modified_at: now,
+      });
+      if (insErr) return { success: false, error: insErr.message };
+      return { success: true };
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to sync user' };
+  }
 }

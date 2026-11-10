@@ -133,8 +133,17 @@ export default function App() {
       setEngagements(engs);
       setIssues(iss);
       setUniverse(uni);
-      setUserProfiles(profiles);
-      setCurrentUser(profiles[0] ?? FALLBACK_USER);
+      if (authSession) {
+        const matched = profiles.find(
+          (p) =>
+            p.name.toLowerCase() === authSession.fullName.toLowerCase() ||
+            p.fullLabel.toLowerCase().includes(authSession.username.toLowerCase()) ||
+            (authSession.username && p.employeeNumber && p.employeeNumber.toLowerCase() === authSession.username.toLowerCase())
+        );
+        setCurrentUser(matched ?? profiles[0] ?? FALLBACK_USER);
+      } else {
+        setCurrentUser(profiles[0] ?? FALLBACK_USER);
+      }
       setFrequenciesState(freq);
     }).catch((err) => {
       console.error('Failed to load data from Supabase:', err);
