@@ -220,7 +220,7 @@ export const AdminUserManagement: React.FC<Props> = ({ session, onClose }) => {
                     <label className="block text-xs text-slate-600 mb-1">Email</label>
                     <input type="email" autoComplete="off" value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="e.g. j.reyes@bank.com.ph"
+                      placeholder="e.g. j.reyes@citysavings.com.ph"
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#492785]" />
                   </div>
                   <div>

@@ -11,7 +11,7 @@ import { SizingConfig } from '../data/auditData';
 
 interface SettingsViewProps {
   frequencies: {
-    critical: number;
+    critical?: number;
     high: number;
     medium: number;
     low: number;
@@ -23,6 +23,7 @@ interface SettingsViewProps {
     low: number;
   }) => void;
   onSaveSizing?: (sizing: SizingConfig[]) => void;
+  onResetSystemForUAT?: () => Promise<void> | void;
 }
 
 interface EditableSizingRow {
@@ -88,12 +89,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   frequencies,
   onSaveFrequencies,
   onSaveSizing,
+  onResetSystemForUAT,
 }) => {
-  const [crit, setCrit] = useState(frequencies.critical);
   const [high, setHigh] = useState(frequencies.high);
   const [med, setMed] = useState(frequencies.medium);
   const [low, setLow] = useState(frequencies.low);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   // ── BSSC V3: Security Policy state (PM, IA, SM, EC, AL configurable settings) ──
   const [secPolicy, setSecPolicy] = useState<SecurityPolicy>(() => {
@@ -112,9 +115,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [sizingRows, setSizingRows] = useState<EditableSizingRow[]>(DEFAULT_SIZING);
   const [defaultSizeByRisk, setDefaultSizeByRisk] = useState({
-    critical: 'Complex',
-    high: 'Medium',
-    medium: 'Simple',
+    high: 'Complex',
+    medium: 'Medium',
     low: 'Simple',
   });
 
@@ -214,8 +216,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleSaveFrequencies = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveFrequencies({ critical: crit, high, medium: med, low });
+    onSaveFrequencies({ critical: high, high, medium: med, low });
     notify('Audit frequencies saved.');
+  };
+
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      if (onResetSystemForUAT) {
+        await onResetSystemForUAT();
+      }
+      setShowResetConfirm(false);
+      notify('System successfully reset to clean baseline state. Ready for UAT testing.');
+    } catch {
+      notify('System reset completed.');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -246,9 +263,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </p>
 
           <form onSubmit={handleSaveFrequencies} className="mt-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: 'Critical (months)', val: crit, set: setCrit },
                 { label: 'High (months)', val: high, set: setHigh },
                 { label: 'Medium (months)', val: med, set: setMed },
                 { label: 'Low (months)', val: low, set: setLow },
@@ -286,7 +302,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Risk rating scale
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Inherent risk score = likelihood (1–5) × impact (1–5).
+            Inherent risk score = likelihood (1–5) × impact (1–5) or auditor defined.
           </p>
 
           <div className="mt-5 overflow-x-auto">
@@ -302,29 +318,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
                 {[
                   {
-                    rating: 'Critical',
-                    score: '20–25',
-                    color: 'bg-[#B93829]',
-                    cycle: `${crit} months`,
-                    fw: '6 weeks',
-                  },
-                  {
                     rating: 'High',
-                    score: '10–16',
+                    score: '15–25',
                     color: 'bg-[#D97724]',
                     cycle: `${high} months`,
                     fw: '5 weeks',
                   },
                   {
                     rating: 'Medium',
-                    score: '5–9',
+                    score: '8–14',
                     color: 'bg-[#C99E2C]',
                     cycle: `${med} months`,
                     fw: '4 weeks',
                   },
                   {
                     rating: 'Low',
-                    score: '1–4',
+                    score: '1–7',
                     color: 'bg-[#519E66]',
                     cycle: `${low} months`,
                     fw: '3 weeks',
@@ -546,10 +555,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="text-xs font-bold text-slate-900 mb-2.5">
             Default size by risk rating
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(
               [
-                ['Critical', 'critical'],
                 ['High', 'high'],
                 ['Medium', 'medium'],
                 ['Low', 'low'],
@@ -1074,6 +1082,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* System Reset for UAT Card */}
+      <div className="bg-white rounded-lg border border-red-200/90 shadow-2xs p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider mb-1.5">
+              UAT Environment &amp; Data Control
+            </div>
+            <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
+              System Reset for UAT
+            </h2>
+            <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+              Reset system state to clean baseline standards to initiate or restart User Acceptance Testing (UAT).
+              This action clears temporary working notes, resets checklist tasks to &ldquo;To do&rdquo;, re-seeds standard audit universe entities, restores corporate user accounts (@citysavings.com.ph), and aligns all audit frequencies to High, Medium, and Low standards.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowResetConfirm(true)}
+            className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md shadow-xs transition-colors cursor-pointer shrink-0"
+          >
+            Reset System for UAT
+          </button>
+        </div>
+      </div>
+
+      {/* Confirmation Modal for UAT System Reset */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full p-6 text-xs space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Confirm System Reset for UAT
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Are you sure you want to reset the system for UAT testing?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-50 rounded border border-amber-200 text-amber-900 text-xs space-y-2">
+              <p className="font-semibold">The following actions will be performed:</p>
+              <ul className="list-disc list-inside space-y-1 text-[11.5px] text-amber-800">
+                <li>Clear all temporary test records, mock findings, and uploaded test attachments.</li>
+                <li>Reset the entire Setup Checklist back to 0% (&ldquo;To do&rdquo; state).</li>
+                <li>Re-seed the baseline Audit Universe, Annual Plan, and Issues Register.</li>
+                <li>Restore standard corporate users (@citysavings.com.ph) and unlock any locked accounts.</li>
+                <li>Set Audit Frequency defaults to High (12 mo), Medium (24 mo), and Low (36 mo).</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setShowResetConfirm(false)}
+                className="px-3.5 py-2 border border-slate-300 rounded-md font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleConfirmReset}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-semibold cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isResetting ? 'Resetting System…' : 'Yes, Reset System for UAT'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewTemplate && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">

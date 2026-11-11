@@ -6,8 +6,9 @@ import {
   UserProfile,
   AuditEngagement,
 } from '../data/auditData';
-import { Check } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 import { AuthSession } from '../utils/authStore';
+import { canAccessTab, getRoleAuthorityInfo } from '../utils/rbac';
 
 interface HeaderAndLifecycleProps {
   activeTab: MainTabId;
@@ -26,6 +27,7 @@ interface HeaderAndLifecycleProps {
   authSession?: AuthSession | null;
   onLogout?: () => void;
   onOpenAdminPanel?: () => void;
+  onResetSystemForUAT?: () => Promise<void> | void;
 }
 
 const MAIN_TABS: { id: MainTabId; label: string }[] = [
@@ -54,8 +56,23 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   authSession,
   onLogout,
   onOpenAdminPanel,
+  onResetSystemForUAT,
 }) => {
   const [showUserMenu, setShowUserMenu] = React.useState(false);
+  const [showUatResetModal, setShowUatResetModal] = React.useState(false);
+  const [isResetting, setIsResetting] = React.useState(false);
+
+  const handleConfirmUatReset = async () => {
+    setIsResetting(true);
+    try {
+      if (onResetSystemForUAT) {
+        await onResetSystemForUAT();
+      }
+      setShowUatResetModal(false);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   return (
     <div className="w-full max-w-[1220px] mx-auto pt-6 pb-3 px-4 sm:px-6">
@@ -157,11 +174,24 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="text-right leading-tight">
-              <div className="text-[13px] font-bold text-slate-900">
-                {currentUser.name}
+              <div className="flex items-center justify-end gap-1.5">
+                <div className="text-[13px] font-bold text-slate-900">
+                  {currentUser.name}
+                </div>
+                {(() => {
+                  const roleInfo = getRoleAuthorityInfo(currentUser.headerSubtitle || currentUser.roleTitle);
+                  return (
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${roleInfo.bg} ${roleInfo.text} border ${roleInfo.border}`}
+                      title={roleInfo.description}
+                    >
+                      {roleInfo.label}
+                    </span>
+                  );
+                })()}
               </div>
-              <div className="text-[11.5px] text-slate-600">
-                {currentUser.headerSubtitle}
+              <div className="text-[11px] text-slate-600 mt-0.5">
+                {currentUser.email || `${currentUser.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@citysavings.com.ph`} · {currentUser.headerSubtitle}
               </div>
             </div>
 
@@ -255,18 +285,29 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
       <div className="mt-3.5 bg-[#F7A81B] rounded-lg px-2 sm:px-4 shadow-2xs flex items-center overflow-x-auto no-scrollbar">
         {MAIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
+          const accessCheck = canAccessTab(
+            currentUser.headerSubtitle || currentUser.roleTitle,
+            tab.id,
+            accessActive
+          );
+          const isRestricted = !accessCheck.allowed;
+
           return (
             <button
               key={tab.id}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`relative px-3.5 py-3 text-[13.5px] whitespace-nowrap transition-colors cursor-pointer select-none ${
+              title={isRestricted ? accessCheck.reason : undefined}
+              className={`relative px-3.5 py-3 text-[13.5px] whitespace-nowrap transition-colors cursor-pointer select-none inline-flex items-center gap-1.5 ${
                 isActive
                   ? 'font-bold text-slate-950'
+                  : isRestricted
+                  ? 'font-medium text-slate-900/70 hover:text-slate-950 hover:bg-black/5'
                   : 'font-medium text-slate-900 hover:text-slate-950 hover:bg-black/5'
               }`}
             >
-              {tab.label}
+              {isRestricted && <Lock className="w-3 h-3 text-slate-900/60 shrink-0" />}
+              <span>{tab.label}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-2 right-2 h-[3px] bg-[#492785] rounded-t-xs" />
               )}

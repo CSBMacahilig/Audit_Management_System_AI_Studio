@@ -97,6 +97,7 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = [
 export interface UserProfile {
   id: string;
   name: string;
+  email?: string;
   roleTitle: string;
   fullLabel: string;
   headerSubtitle: string;
@@ -122,6 +123,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'm-santos',
     name: 'M. Santos',
+    email: 'm.santos@citysavings.com.ph',
     roleTitle: 'Chief Audit Executive (Internal Audit)',
     fullLabel: 'M. Santos – Chief Audit Executive (Internal Audit)',
     headerSubtitle: 'System administrator, Chief Audit Executive',
@@ -129,7 +131,6 @@ export const USERS: UserProfile[] = [
     canApproveHead: true,
     canApproveIndependent: true,
     canApproveCAE: true,
-    // BSSC V3 security fields
     employeeNumber: 'EMP-001',
     lastLoginDate: '2026-11-06T07:00:00Z',
     accountModifiedAt: '2026-01-15T08:00:00Z',
@@ -143,8 +144,32 @@ export const USERS: UserProfile[] = [
     isPrivileged: true,
   },
   {
+    id: 'c-macahilig',
+    name: 'Christian John Macahilig',
+    email: 'christian.macahilig@citysavings.com.ph',
+    roleTitle: 'Chief Audit Executive (Internal Audit)',
+    fullLabel: 'Christian John Macahilig – Chief Audit Executive (Internal Audit)',
+    headerSubtitle: 'System administrator, Chief Audit Executive',
+    department: 'Internal Audit',
+    canApproveHead: true,
+    canApproveIndependent: true,
+    canApproveCAE: true,
+    employeeNumber: 'CSB-00001',
+    lastLoginDate: '2026-11-10T02:19:06Z',
+    accountModifiedAt: '2026-01-15T08:00:00Z',
+    accountStatus: 'Active',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    passwordLastChanged: '2026-09-01T00:00:00Z',
+    passwordHistory: [],
+    mfaEnabled: true,
+    isPrivileged: true,
+  },
+  {
     id: 'r-dizon',
     name: 'R. Dizon',
+    email: 'r.dizon@citysavings.com.ph',
     roleTitle: 'Audit Division Head (Internal Audit)',
     fullLabel: 'R. Dizon – Audit Division Head (Internal Audit)',
     headerSubtitle: 'Audit Division Head',
@@ -167,6 +192,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'a-villanueva',
     name: 'A. Villanueva',
+    email: 'a.villanueva@citysavings.com.ph',
     roleTitle: 'Supervising Auditor (Internal Audit)',
     fullLabel: 'A. Villanueva – Supervising Auditor (Internal Audit)',
     headerSubtitle: 'Supervising Auditor',
@@ -189,6 +215,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'p-mendoza',
     name: 'P. Mendoza',
+    email: 'p.mendoza@citysavings.com.ph',
     roleTitle: 'Audit-in-Charge (Information Security)',
     fullLabel: 'P. Mendoza – Audit-in-Charge (Information Security)',
     headerSubtitle: 'Audit-in-Charge',
@@ -211,6 +238,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'k-lim',
     name: 'K. Lim',
+    email: 'k.lim@citysavings.com.ph',
     roleTitle: 'Assisting Auditor (Internal Audit)',
     fullLabel: 'K. Lim – Assisting Auditor (Internal Audit)',
     headerSubtitle: 'Assisting Auditor',
@@ -233,6 +261,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'e-navarro',
     name: 'E. Navarro',
+    email: 'e.navarro@citysavings.com.ph',
     roleTitle: 'VP, Head of IT & CISO (IT & Information Security)',
     fullLabel: 'E. Navarro – VP, Head of IT & CISO (IT & Information Security)',
     headerSubtitle: 'Auditee',
@@ -255,6 +284,7 @@ export const USERS: UserProfile[] = [
   {
     id: 'g-soriano',
     name: 'G. Soriano',
+    email: 'g.soriano@citysavings.com.ph',
     roleTitle: 'AVP, Loan Operations (Loan Release & Disbursement)',
     fullLabel: 'G. Soriano – AVP, Loan Operations (Loan Release & Disbursement)',
     headerSubtitle: 'Auditee',

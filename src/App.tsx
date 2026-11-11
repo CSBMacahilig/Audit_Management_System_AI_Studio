@@ -25,6 +25,8 @@ import {
 } from './components/AdditionalViews';
 import { LoginPage, ForcePasswordChange } from './components/LoginPage';
 import { AdminUserManagement } from './components/AdminUserManagement';
+import { canAccessTab } from './utils/rbac';
+import { AccessGuard } from './components/AccessGuard';
 import {
   AuthSession,
   loadSession,
@@ -109,7 +111,7 @@ export default function App() {
   const [universe, setUniverse] = useState<UniverseEntity[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [accessActive, setAccessActive] = useState<boolean>(false);
+  const [accessActive, setAccessActive] = useState<boolean>(true);
   const [dataLoading, setDataLoading] = useState(true);
 
   const [frequencies, setFrequenciesState] = useState<AuditFrequencies>({
@@ -137,6 +139,8 @@ export default function App() {
         const matched = profiles.find(
           (p) =>
             p.name.toLowerCase() === authSession.fullName.toLowerCase() ||
+            (authSession.email && p.email && p.email.toLowerCase() === authSession.email.toLowerCase()) ||
+            (authSession.username && p.email && p.email.toLowerCase().startsWith(authSession.username.toLowerCase())) ||
             p.fullLabel.toLowerCase().includes(authSession.username.toLowerCase()) ||
             (authSession.username && p.employeeNumber && p.employeeNumber.toLowerCase() === authSession.username.toLowerCase())
         );
@@ -715,122 +719,167 @@ export default function App() {
       />
 
       <main className="w-full max-w-[1220px] mx-auto px-4 sm:px-6 mt-2">
-        {activeTab === 'overview' && (
-          <OverviewView
-            engagements={engagements}
-            universe={universe}
-            issues={issues}
-            onSelectLifecycleStage={handleSelectLifecycleStage}
-            onOpenEngagement={handleSelectEngagement}
-            onSelectTab={handleSelectTab}
-          />
-        )}
+        {(() => {
+          const tabCheck = canAccessTab(
+            currentUser?.headerSubtitle || currentUser?.roleTitle,
+            activeTab,
+            accessActive
+          );
 
-        {activeTab === 'universe' && (
-          <AuditUniverseView
-            universe={universe}
-            universeRecords={universe.map((u) => ({
-              id: u.id,
-              name: u.name,
-              subtitle: u.division || u.category,
-              type: (u.category as UniverseRecord['type']) || 'Process',
-              owner: u.defaultLead || 'Internal Audit',
-              likelihood: u.likelihood,
-              impact: u.impact,
-              riskScore: u.riskScore,
-              riskLevel: u.riskLevel,
-              cycleMonths: u.cycleMonths,
-              lastAudit: u.lastAudited || '—',
-              nextDue: u.nextDue || '—',
-              nextDueStatus: (u.nextDue && u.nextDue.toLowerCase().includes('overdue')
-                ? 'Overdue'
-                : 'On track') as 'Overdue' | 'Due soon' | 'On track',
-            }))}
-            frequencies={frequencies}
-            isReauditMode={activeLifecycleStage === 7}
-            onAddUniverseEntity={handleAddUniverseEntity}
-            onDeleteUniverseEntity={handleDeleteUniverseEntity}
-          />
-        )}
+          if (!tabCheck.allowed) {
+            const tabNames: Record<MainTabId, string> = {
+              overview: 'Overview',
+              universe: 'Audit Universe',
+              'annual-plan': 'Annual Audit Plan',
+              timeline: 'Timeline & Milestones',
+              fieldwork: 'Fieldwork',
+              issues: 'Issues & Remediation',
+              'master-data': 'Master Data Configuration',
+              settings: 'System Settings',
+              setup: 'Setup Checklist',
+              access: 'User Accounts & Access Control',
+            };
 
-        {activeTab === 'annual-plan' && (
-          <AnnualPlanView
-            engagements={engagements}
-            universe={universe}
-            userProfiles={userProfiles}
-            onSelectEngagement={handleSelectEngagement}
-            onAddEngagement={(newEng) => {
-              upsertEngagement(newEng);
-              setEngagements((prev) => [newEng, ...prev]);
-            }}
-            onAutoAssignLeads={handleAutoAssignLeads}
-            onDraftFromUniverse={handleDraftFromUniverse}
-          />
-        )}
+            return (
+              <AccessGuard
+                tabName={tabNames[activeTab] || activeTab}
+                tabId={activeTab}
+                currentUser={currentUser ?? FALLBACK_USER}
+                reason={tabCheck.reason}
+                requiredRole={tabCheck.requiredRole}
+                onGoToOverview={() => handleSelectTab('overview')}
+                onSwitchRole={() => {
+                  const profiles = userProfiles.length > 0 ? userProfiles : [FALLBACK_USER];
+                  const currentIdx = profiles.findIndex((u) => u.id === currentUser?.id);
+                  const nextUser = profiles[(currentIdx + 1) % profiles.length];
+                  if (nextUser) setCurrentUser(nextUser);
+                }}
+                onBypassSimulation={() => setAccessActive(false)}
+              />
+            );
+          }
 
-        {activeTab === 'timeline' && (
-          <TimelineView
-            engagements={engagements}
-            onOpenEngagement={handleSelectEngagement}
-          />
-        )}
+          return (
+            <>
+              {activeTab === 'overview' && (
+                <OverviewView
+                  engagements={engagements}
+                  universe={universe}
+                  issues={issues}
+                  onSelectLifecycleStage={handleSelectLifecycleStage}
+                  onOpenEngagement={handleSelectEngagement}
+                  onSelectTab={handleSelectTab}
+                />
+              )}
 
-        {activeTab === 'fieldwork' && (
-          <FieldworkView
-            engagements={engagements}
-            selectedEngagement={selectedEngagement}
-            onSelectEngagement={handleSelectEngagement}
-            activeSubTab={activeSubTab}
-            onSelectSubTab={handleSelectSubTab}
-            currentUser={currentUser ?? FALLBACK_USER}
-            onChangeUser={setCurrentUser}
-            userProfiles={userProfiles}
-            accessActive={accessActive}
-            onApproveWorkingNote={handleApproveWorkingNote}
-            onCompleteActivity={handleCompleteActivity}
-            onAddWorkingNote={handleAddWorkingNote}
-            onAddFinding={handleAddFinding}
-            onUpdateFindingStatus={handleUpdateFindingStatus}
-            onUploadFile={handleUploadFile}
-            onUpdateReport={handleUpdateReport}
-            onAdvanceEngagementStage={handleAdvanceEngagementStage}
-          />
-        )}
+              {activeTab === 'universe' && (
+                <AuditUniverseView
+                  universe={universe}
+                  universeRecords={universe.map((u) => ({
+                    id: u.id,
+                    name: u.name,
+                    subtitle: u.division || u.category,
+                    type: (u.category as UniverseRecord['type']) || 'Process',
+                    owner: u.defaultLead || 'Internal Audit',
+                    likelihood: u.likelihood,
+                    impact: u.impact,
+                    riskScore: u.riskScore,
+                    riskLevel: u.riskLevel,
+                    cycleMonths: u.cycleMonths,
+                    lastAudit: u.lastAudited || '—',
+                    nextDue: u.nextDue || '—',
+                    nextDueStatus: (u.nextDue && u.nextDue.toLowerCase().includes('overdue')
+                      ? 'Overdue'
+                      : 'On track') as 'Overdue' | 'Due soon' | 'On track',
+                  }))}
+                  frequencies={frequencies}
+                  isReauditMode={activeLifecycleStage === 7}
+                  onAddUniverseEntity={handleAddUniverseEntity}
+                  onDeleteUniverseEntity={handleDeleteUniverseEntity}
+                />
+              )}
 
-        {activeTab === 'issues' && (
-          <IssuesView
-            engagements={engagements}
-            issues={issues}
-            onUpdateIssue={handleUpdateIssue}
-            activeLifecycleStage={activeLifecycleStage}
-            onValidateAndCloseFinding={handleValidateAndCloseFinding}
-          />
-        )}
+              {activeTab === 'annual-plan' && (
+                <AnnualPlanView
+                  engagements={engagements}
+                  universe={universe}
+                  userProfiles={userProfiles}
+                  onSelectEngagement={handleSelectEngagement}
+                  onAddEngagement={(newEng) => {
+                    upsertEngagement(newEng);
+                    setEngagements((prev) => [newEng, ...prev]);
+                  }}
+                  onAutoAssignLeads={handleAutoAssignLeads}
+                  onDraftFromUniverse={handleDraftFromUniverse}
+                />
+              )}
 
-        {activeTab === 'settings' && (
-          <SettingsView
-            frequencies={frequencies}
-            onSaveFrequencies={handleSaveFrequencies}
-            onSaveSizing={handleSaveSizing}
-          />
-        )}
+              {activeTab === 'timeline' && (
+                <TimelineView
+                  engagements={engagements}
+                  onOpenEngagement={handleSelectEngagement}
+                />
+              )}
 
-        {(activeTab === 'master-data' ||
-          activeTab === 'setup' ||
-          activeTab === 'access') && (
-          <MasterDataSetupAccessView
-            tab={activeTab}
-            currentUser={currentUser ?? FALLBACK_USER}
-            onChangeUser={setCurrentUser}
-            userProfiles={userProfiles}
-            accessActive={accessActive}
-            onToggleAccess={() => setAccessActive((prev) => !prev)}
-            onSelectTab={handleSelectTab}
-            onAddUserProfile={handleAddUserProfile}
-            onUpdateUserProfile={handleUpdateUserProfile}
-            onDeleteUserProfile={handleDeleteUserProfile}
-          />
-        )}
+              {activeTab === 'fieldwork' && (
+                <FieldworkView
+                  engagements={engagements}
+                  selectedEngagement={selectedEngagement}
+                  onSelectEngagement={handleSelectEngagement}
+                  activeSubTab={activeSubTab}
+                  onSelectSubTab={handleSelectSubTab}
+                  currentUser={currentUser ?? FALLBACK_USER}
+                  onChangeUser={setCurrentUser}
+                  userProfiles={userProfiles}
+                  accessActive={accessActive}
+                  onApproveWorkingNote={handleApproveWorkingNote}
+                  onCompleteActivity={handleCompleteActivity}
+                  onAddWorkingNote={handleAddWorkingNote}
+                  onAddFinding={handleAddFinding}
+                  onUpdateFindingStatus={handleUpdateFindingStatus}
+                  onUploadFile={handleUploadFile}
+                  onUpdateReport={handleUpdateReport}
+                  onAdvanceEngagementStage={handleAdvanceEngagementStage}
+                />
+              )}
+
+              {activeTab === 'issues' && (
+                <IssuesView
+                  engagements={engagements}
+                  issues={issues}
+                  onUpdateIssue={handleUpdateIssue}
+                  activeLifecycleStage={activeLifecycleStage}
+                  onValidateAndCloseFinding={handleValidateAndCloseFinding}
+                />
+              )}
+
+              {activeTab === 'settings' && (
+                <SettingsView
+                  frequencies={frequencies}
+                  onSaveFrequencies={handleSaveFrequencies}
+                  onSaveSizing={handleSaveSizing}
+                />
+              )}
+
+              {(activeTab === 'master-data' ||
+                activeTab === 'setup' ||
+                activeTab === 'access') && (
+                <MasterDataSetupAccessView
+                  tab={activeTab}
+                  currentUser={currentUser ?? FALLBACK_USER}
+                  onChangeUser={setCurrentUser}
+                  userProfiles={userProfiles}
+                  accessActive={accessActive}
+                  onToggleAccess={() => setAccessActive((prev) => !prev)}
+                  onSelectTab={handleSelectTab}
+                  onAddUserProfile={handleAddUserProfile}
+                  onUpdateUserProfile={handleUpdateUserProfile}
+                  onDeleteUserProfile={handleDeleteUserProfile}
+                />
+              )}
+            </>
+          );
+        })()}
       </main>
     </div>
   );

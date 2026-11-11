@@ -33,6 +33,7 @@ export interface SystemUser {
 export interface AuthSession {
   userId: string;
   username: string;
+  email?: string;
   role: SystemRole;
   fullName: string;
   token: string;
@@ -265,6 +266,7 @@ export async function login(username: string, password: string): Promise<LoginRe
   const session: AuthSession = {
     userId: targetUser.id,
     username: targetUser.username,
+    email: targetUser.email,
     role: targetUser.role,
     fullName: targetUser.fullName,
     token,

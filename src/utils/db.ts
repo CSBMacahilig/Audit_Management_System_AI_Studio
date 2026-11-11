@@ -585,3 +585,38 @@ export async function saveMasterData<T>(key: string, value: T): Promise<void> {
     // If table does not exist in Supabase, localStorage ensures it stays persistent
   }
 }
+
+export async function resetSystemToBaseline(): Promise<void> {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith('ams_') ||
+          k.startsWith('bssc_') ||
+          k.includes('master_data') ||
+          k.includes('access_users') ||
+          k.includes('setup_checklist'))
+      ) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn('localStorage clean failed:', err);
+  }
+
+  try {
+    await supabase.from('audit_frequencies').upsert({
+      id: 'global',
+      critical: 12,
+      high: 12,
+      medium: 24,
+      low: 36,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // ignore
+  }
+}

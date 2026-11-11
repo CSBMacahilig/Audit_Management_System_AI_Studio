@@ -39,9 +39,8 @@ export const OverviewView: React.FC<{
   onSelectTab: (tab: MainTabId) => void;
 }> = ({ onOpenEngagement, onSelectTab, onSelectLifecycleStage, engagements, universe = [], issues = [] }) => {
   const getRiskLevel = (score: number): RiskLevel => {
-    if (score >= 20) return 'Critical';
-    if (score >= 10) return 'High';
-    if (score >= 5) return 'Medium';
+    if (score >= 15) return 'High';
+    if (score >= 8) return 'Medium';
     return 'Low';
   };
 
@@ -65,11 +64,8 @@ export const OverviewView: React.FC<{
 
   const getCellStyle = (level: RiskLevel, count: number) => {
     switch (level) {
-      case 'Critical':
-        return count > 0
-          ? 'bg-[#B93829] text-white'
-          : 'bg-[#F9ECEB] text-slate-400 border border-[#B93829]/20';
       case 'High':
+      case 'Critical':
         return count > 0
           ? 'bg-[#D97724] text-white'
           : 'bg-[#FDF3EA] text-slate-400 border border-[#D97724]/20';
@@ -84,8 +80,9 @@ export const OverviewView: React.FC<{
     }
   };
 
-  const criticalUniverseCount = universe.filter((u) => u.riskLevel === 'Critical').length;
-  const highUniverseCount = universe.filter((u) => u.riskLevel === 'High').length;
+  const highUniverseCount = universe.filter((u) => u.riskLevel === 'High' || u.riskLevel === 'Critical').length;
+  const mediumUniverseCount = universe.filter((u) => u.riskLevel === 'Medium').length;
+  const lowUniverseCount = universe.filter((u) => u.riskLevel === 'Low').length;
 
   const closedEngagementsCount = engagements.filter((e) => e.status === 'Closed').length;
   const activeEngagementsCount = engagements.filter(
@@ -144,14 +141,18 @@ export const OverviewView: React.FC<{
             {universe.length}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 mt-2.5 tabular-nums">
-            <span className="px-1.5 py-0.5 rounded bg-[#B93829] text-white font-bold text-[11px]">
-              {criticalUniverseCount}
-            </span>
-            <span>Critical</span>
-            <span className="px-1.5 py-0.5 rounded bg-[#D97724] text-white font-bold text-[11px] ml-1">
+            <span className="px-1.5 py-0.5 rounded bg-[#D97724] text-white font-bold text-[11px]">
               {highUniverseCount}
             </span>
             <span>High</span>
+            <span className="px-1.5 py-0.5 rounded bg-[#C99E2C] text-white font-bold text-[11px] ml-1">
+              {mediumUniverseCount}
+            </span>
+            <span>Medium</span>
+            <span className="px-1.5 py-0.5 rounded bg-[#519E66] text-white font-bold text-[11px] ml-1">
+              {lowUniverseCount}
+            </span>
+            <span>Low</span>
           </div>
         </div>
 
@@ -427,11 +428,18 @@ export const OverviewView: React.FC<{
 export const AuditUniverseView: React.FC<{
   universe: UniverseEntity[];
   universeRecords: UniverseRecord[];
-  frequencies: { critical: number; high: number; medium: number; low: number };
+  frequencies: { critical?: number; high: number; medium: number; low: number };
   isReauditMode?: boolean;
   onAddUniverseEntity?: (entity: UniverseEntity) => void;
+  onUpdateUniverseEntity?: (entity: UniverseEntity) => void;
   onDeleteUniverseEntity?: (id: string) => void;
-}> = ({ frequencies, universeRecords, onAddUniverseEntity, onDeleteUniverseEntity }) => {
+}> = ({
+  frequencies,
+  universeRecords,
+  onAddUniverseEntity,
+  onUpdateUniverseEntity,
+  onDeleteUniverseEntity,
+}) => {
   const [records, setRecords] = useState<UniverseRecord[]>(universeRecords);
   const [dynamicEntityTypes, setDynamicEntityTypes] = useState<string[]>(DEFAULT_ENTITY_TYPES);
   const [dynamicCategories, setDynamicCategories] = useState<string[]>(DEFAULT_AUDIT_CATEGORIES);
@@ -472,6 +480,77 @@ export const AuditUniverseView: React.FC<{
   const [newOwner, setNewOwner] = useState('R. Bautista');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(4);
+  const [newRiskScore, setNewRiskScore] = useState(16);
+  const [scoreOverridden, setScoreOverridden] = useState(false);
+  const [newLastAudit, setNewLastAudit] = useState('2026-10-04');
+
+  // Edit entity modal form
+  const [editingRecord, setEditingRecord] = useState<UniverseRecord | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSubtitle, setEditSubtitle] = useState('');
+  const [editType, setEditType] = useState<UniverseRecord['type']>('Process');
+  const [editOwner, setEditOwner] = useState('');
+  const [editLikelihood, setEditLikelihood] = useState(4);
+  const [editImpact, setEditImpact] = useState(4);
+  const [editRiskScore, setEditRiskScore] = useState(16);
+  const [editLastAudit, setEditLastAudit] = useState('2026-10-04');
+  const [editCycleMonths, setEditCycleMonths] = useState(12);
+  const [editNextDue, setEditNextDue] = useState('');
+  const [editNextDueStatus, setEditNextDueStatus] = useState<'Overdue' | 'Due soon' | 'On track'>('On track');
+
+  const calculateRiskLevel = (score: number): RiskLevel => {
+    if (score >= 15) return 'High';
+    if (score >= 8) return 'Medium';
+    return 'Low';
+  };
+
+  const getCycleMonths = (level: RiskLevel): number => {
+    if (level === 'High' || level === 'Critical') return frequencies.high;
+    if (level === 'Medium') return frequencies.medium;
+    return frequencies.low;
+  };
+
+  const formatDateDisplay = (dateStr: string): string => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {
+      // ignore
+    }
+    return dateStr;
+  };
+
+  const computeNextDueDate = (dateStr: string, months: number): string => {
+    if (!dateStr) return 'Pending';
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        d.setMonth(d.getMonth() + months);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {
+      // ignore
+    }
+    return 'Pending';
+  };
+
+  const handleOpenEditModal = (rec: UniverseRecord) => {
+    setEditingRecord(rec);
+    setEditName(rec.name);
+    setEditSubtitle(rec.subtitle);
+    setEditType(rec.type);
+    setEditOwner(rec.owner);
+    setEditLikelihood(rec.likelihood);
+    setEditImpact(rec.impact);
+    setEditRiskScore(rec.riskScore);
+    setEditLastAudit(rec.lastAudit);
+    setEditCycleMonths(rec.cycleMonths);
+    setEditNextDue(rec.nextDue);
+    setEditNextDueStatus(rec.nextDueStatus);
+  };
 
   const filtered = records.filter((r) => {
     const matchesSearch =
@@ -489,23 +568,11 @@ export const AuditUniverseView: React.FC<{
   const handleAddEntity = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    const score = newLikelihood * newImpact;
-    const riskLevel: RiskLevel =
-      score >= 20
-        ? 'Critical'
-        : score >= 10
-        ? 'High'
-        : score >= 5
-        ? 'Medium'
-        : 'Low';
-    const cycleMonths =
-      riskLevel === 'Critical'
-        ? frequencies.critical
-        : riskLevel === 'High'
-        ? frequencies.high
-        : riskLevel === 'Medium'
-        ? frequencies.medium
-        : frequencies.low;
+    const score = Number(newRiskScore) || (newLikelihood * newImpact);
+    const riskLevel: RiskLevel = calculateRiskLevel(score);
+    const cycleMonths = getCycleMonths(riskLevel);
+    const formattedLastAudit = formatDateDisplay(newLastAudit);
+    const nextDue = computeNextDueDate(newLastAudit, cycleMonths);
 
     const added: UniverseRecord = {
       id: `ur-${Date.now()}`,
@@ -518,8 +585,8 @@ export const AuditUniverseView: React.FC<{
       riskScore: score,
       riskLevel,
       cycleMonths,
-      lastAudit: '4 Oct 2026',
-      nextDue: '4 Apr 2027',
+      lastAudit: formattedLastAudit,
+      nextDue,
       nextDueStatus: 'On track',
     };
     setRecords((prev) => [added, ...prev]);
@@ -543,7 +610,57 @@ export const AuditUniverseView: React.FC<{
     }
 
     setNewName('');
+    setScoreOverridden(false);
     setShowAddModal(false);
+  };
+
+  const handleSaveEditEntity = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRecord || !editName.trim()) return;
+
+    const score = Number(editRiskScore) || (editLikelihood * editImpact);
+    const riskLevel: RiskLevel = calculateRiskLevel(score);
+    const cycleMonths = editCycleMonths || getCycleMonths(riskLevel);
+    const formattedLastAudit = formatDateDisplay(editLastAudit);
+    const nextDue = editNextDue.trim() ? editNextDue.trim() : computeNextDueDate(editLastAudit, cycleMonths);
+
+    const updated: UniverseRecord = {
+      ...editingRecord,
+      name: editName.trim(),
+      subtitle: editSubtitle.trim(),
+      type: editType,
+      owner: editOwner.trim(),
+      likelihood: editLikelihood,
+      impact: editImpact,
+      riskScore: score,
+      riskLevel,
+      cycleMonths,
+      lastAudit: formattedLastAudit,
+      nextDue,
+      nextDueStatus: editNextDueStatus,
+    };
+
+    setRecords((prev) => prev.map((r) => (r.id === editingRecord.id ? updated : r)));
+
+    if (onUpdateUniverseEntity) {
+      onUpdateUniverseEntity({
+        id: updated.id,
+        code: `UNV-${updated.id.slice(-4)}`,
+        name: updated.name,
+        division: updated.subtitle,
+        category: updated.type,
+        likelihood: updated.likelihood,
+        impact: updated.impact,
+        riskScore: updated.riskScore,
+        riskLevel: updated.riskLevel,
+        lastAudited: updated.lastAudit,
+        nextDue: updated.nextDue,
+        cycleMonths: updated.cycleMonths,
+        defaultLead: updated.owner,
+      });
+    }
+
+    setEditingRecord(null);
   };
 
   return (
@@ -608,7 +725,6 @@ export const AuditUniverseView: React.FC<{
           className="px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-800 focus:outline-none focus:border-[#492785]"
         >
           <option value="All risk levels">All risk levels</option>
-          <option value="Critical">Critical</option>
           <option value="High">High</option>
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
@@ -628,15 +744,13 @@ export const AuditUniverseView: React.FC<{
               <th className="py-2.5 px-4">CYCLE</th>
               <th className="py-2.5 px-4">LAST AUDIT</th>
               <th className="py-2.5 px-4">NEXT DUE</th>
-              <th className="py-2.5 pl-4 text-right" />
+              <th className="py-2.5 pl-4 text-right">ACTIONS</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
             {filtered.map((rec) => {
               const cycle =
-                rec.riskLevel === 'Critical'
-                  ? frequencies.critical
-                  : rec.riskLevel === 'High'
+                rec.riskLevel === 'High' || rec.riskLevel === 'Critical'
                   ? frequencies.high
                   : rec.riskLevel === 'Medium'
                   ? frequencies.medium
@@ -656,16 +770,14 @@ export const AuditUniverseView: React.FC<{
                   <td className="py-3.5 px-4">
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-xs font-bold text-white ${
-                        rec.riskLevel === 'Critical'
-                          ? 'bg-[#B93829]'
-                          : rec.riskLevel === 'High'
+                        rec.riskLevel === 'High' || rec.riskLevel === 'Critical'
                           ? 'bg-[#D97724]'
                           : rec.riskLevel === 'Medium'
                           ? 'bg-[#C99E2C]'
                           : 'bg-[#519E66]'
                       }`}
                     >
-                      {rec.riskLevel}
+                      {rec.riskLevel === 'Critical' ? 'High' : rec.riskLevel}
                     </span>
                   </td>
                   <td className="py-3.5 px-4 text-slate-700">Every {cycle} mo</td>
@@ -685,18 +797,27 @@ export const AuditUniverseView: React.FC<{
                     </div>
                   </td>
                   <td className="py-3.5 pl-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecords((prev) => prev.filter((item) => item.id !== rec.id));
-                        if (onDeleteUniverseEntity) {
-                          onDeleteUniverseEntity(rec.id);
-                        }
-                      }}
-                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(rec)}
+                        className="px-2.5 py-1 bg-white hover:bg-purple-50 text-[#492785] border border-purple-200 rounded text-xs font-semibold cursor-pointer transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecords((prev) => prev.filter((item) => item.id !== rec.id));
+                          if (onDeleteUniverseEntity) {
+                            onDeleteUniverseEntity(rec.id);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -737,11 +858,20 @@ export const AuditUniverseView: React.FC<{
       {/* Modal: Add Entity */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 text-xs">
-            <h3 className="text-base font-bold text-slate-900">
-              Add Auditable Entity to Universe
-            </h3>
-            <form onSubmit={handleAddEntity} className="mt-4 space-y-3">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                Add Auditable Entity to Universe
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddEntity} className="mt-4 space-y-3.5">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Entity Name
@@ -755,6 +885,7 @@ export const AuditUniverseView: React.FC<{
                   className="w-full px-3 py-2 border border-slate-300 rounded-md"
                 />
               </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Division / Category
@@ -769,6 +900,7 @@ export const AuditUniverseView: React.FC<{
                   ))}
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -803,6 +935,8 @@ export const AuditUniverseView: React.FC<{
                   </select>
                 </div>
               </div>
+
+              {/* Likelihood & Impact */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -813,7 +947,13 @@ export const AuditUniverseView: React.FC<{
                     min={1}
                     max={5}
                     value={newLikelihood}
-                    onChange={(e) => setNewLikelihood(Number(e.target.value))}
+                    onChange={(e) => {
+                      const l = Number(e.target.value);
+                      setNewLikelihood(l);
+                      if (!scoreOverridden) {
+                        setNewRiskScore(l * newImpact);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   />
                 </div>
@@ -826,11 +966,85 @@ export const AuditUniverseView: React.FC<{
                     min={1}
                     max={5}
                     value={newImpact}
-                    onChange={(e) => setNewImpact(Number(e.target.value))}
+                    onChange={(e) => {
+                      const i = Number(e.target.value);
+                      setNewImpact(i);
+                      if (!scoreOverridden) {
+                        setNewRiskScore(newLikelihood * i);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   />
                 </div>
               </div>
+
+              {/* Risk Score (Auditor Defined - short-term solution) */}
+              <div className="bg-purple-50/60 border border-purple-200/80 rounded-md p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-[#492785]">
+                    Risk Score (Auditor Defined)
+                  </label>
+                  {(() => {
+                    const level = calculateRiskLevel(newRiskScore);
+                    return (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${
+                          level === 'High'
+                            ? 'bg-[#D97724]'
+                            : level === 'Medium'
+                            ? 'bg-[#C99E2C]'
+                            : 'bg-[#519E66]'
+                        }`}
+                      >
+                        {level} Risk (Score: {newRiskScore})
+                      </span>
+                    );
+                  })()}
+                </div>
+                <p className="text-[11px] text-slate-500 mb-2">
+                  Auditor may define or directly override the risk score per entity (Calculated: {newLikelihood} × {newImpact} = {newLikelihood * newImpact}).
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={newRiskScore}
+                    onChange={(e) => {
+                      setNewRiskScore(Number(e.target.value));
+                      setScoreOverridden(true);
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRiskScore(newLikelihood * newImpact);
+                      setScoreOverridden(false);
+                    }}
+                    className="px-2.5 py-2 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 shrink-0"
+                  >
+                    Reset to L × I
+                  </button>
+                </div>
+              </div>
+
+              {/* Last Audit Date */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Last Audit Date
+                </label>
+                <input
+                  type="date"
+                  value={newLastAudit}
+                  onChange={(e) => setNewLastAudit(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Next audit due will be automatically scheduled from this date based on {calculateRiskLevel(newRiskScore)} risk cycle.
+                </span>
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -841,9 +1055,240 @@ export const AuditUniverseView: React.FC<{
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#492785] text-white rounded-md font-semibold cursor-pointer"
+                  className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
                 >
                   Save entity
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Entity (Item 13 & 16) */}
+      {editingRecord && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">
+                Edit Auditable Entity
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingRecord(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditEntity} className="mt-4 space-y-3.5">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Entity Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Division / Category
+                </label>
+                <select
+                  value={editSubtitle}
+                  onChange={(e) => setEditSubtitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                >
+                  {dynamicCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Entity Type
+                  </label>
+                  <select
+                    value={editType}
+                    onChange={(e) =>
+                      setEditType(e.target.value as UniverseRecord['type'])
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  >
+                    {dynamicEntityTypes.map((et) => (
+                      <option key={et} value={et}>{et}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Process Owner
+                  </label>
+                  <select
+                    value={editOwner}
+                    onChange={(e) => setEditOwner(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  >
+                    {dynamicOwners.map((owner) => (
+                      <option key={owner.head + ' - ' + owner.unit} value={`${owner.head} (${owner.unit})`}>
+                        {owner.head} — {owner.unit}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Likelihood & Impact */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Likelihood (1–5)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={editLikelihood}
+                    onChange={(e) => setEditLikelihood(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Impact (1–5)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={editImpact}
+                    onChange={(e) => setEditImpact(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              {/* Risk Score (Auditor Defined) */}
+              <div className="bg-purple-50/60 border border-purple-200/80 rounded-md p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-[#492785]">
+                    Risk Score (Auditor Defined)
+                  </label>
+                  {(() => {
+                    const level = calculateRiskLevel(editRiskScore);
+                    return (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${
+                          level === 'High'
+                            ? 'bg-[#D97724]'
+                            : level === 'Medium'
+                            ? 'bg-[#C99E2C]'
+                            : 'bg-[#519E66]'
+                        }`}
+                      >
+                        {level} Risk (Score: {editRiskScore})
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={editRiskScore}
+                    onChange={(e) => setEditRiskScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditRiskScore(editLikelihood * editImpact)}
+                    className="px-2.5 py-2 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 shrink-0"
+                  >
+                    Reset to L × I
+                  </button>
+                </div>
+              </div>
+
+              {/* Last Audit Date & Cycle */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Last Audit Date
+                  </label>
+                  <input
+                    type="text"
+                    value={editLastAudit}
+                    onChange={(e) => setEditLastAudit(e.target.value)}
+                    placeholder="e.g. 4 Oct 2026 or 2026-10-04"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Cycle (Months)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={editCycleMonths}
+                    onChange={(e) => setEditCycleMonths(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* Next Due & Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Next Due Date
+                  </label>
+                  <input
+                    type="text"
+                    value={editNextDue}
+                    onChange={(e) => setEditNextDue(e.target.value)}
+                    placeholder="e.g. 4 Apr 2027"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Schedule Status
+                  </label>
+                  <select
+                    value={editNextDueStatus}
+                    onChange={(e) => setEditNextDueStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  >
+                    <option value="On track">On track</option>
+                    <option value="Due soon">Due soon</option>
+                    <option value="Overdue">Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded-md font-semibold text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
+                >
+                  Update entity
                 </button>
               </div>
             </form>
@@ -1456,55 +1901,55 @@ const DEFAULT_AUDITORS: AuditorRecord[] = [
   {
     name: 'M. Santos',
     role: 'Chief Audit Executive',
-    email: 'm.santos@bank.com.ph',
+    email: 'm.santos@citysavings.com.ph',
     skills: 'Operations, Credit review, IT audit, Information security, Compliance, Financial, Branch audit',
   },
   {
     name: 'J. Dela Cruz',
     role: 'Audit Division Head',
-    email: 'j.delacruz@bank.com.ph',
+    email: 'j.delacruz@citysavings.com.ph',
     skills: 'IT audit, Information security',
   },
   {
     name: 'A. Villanueva',
     role: 'Supervising Auditor',
-    email: 'a.villanueva@bank.com.ph',
+    email: 'a.villanueva@citysavings.com.ph',
     skills: 'Operations, Financial, Branch audit',
   },
   {
     name: 'P. Mendoza',
     role: 'Audit-in-Charge',
-    email: 'p.mendoza@bank.com.ph',
+    email: 'p.mendoza@citysavings.com.ph',
     skills: 'IT audit, Information security',
   },
   {
     name: 'K. Lim',
     role: 'Assisting Auditor',
-    email: 'k.lim@bank.com.ph',
+    email: 'k.lim@citysavings.com.ph',
     skills: 'Compliance, Branch audit, Operations',
   },
   {
     name: 'D. Ramos',
     role: 'Assisting Auditor',
-    email: 'd.ramos@bank.com.ph',
+    email: 'd.ramos@citysavings.com.ph',
     skills: 'Credit review, Financial',
   },
   {
     name: 'B. Tolentino',
     role: 'Assisting Auditor',
-    email: 'b.tolentino@bank.com.ph',
+    email: 'b.tolentino@citysavings.com.ph',
     skills: 'IT audit, Operations',
   },
   {
     name: 'R. Garcia',
     role: 'Assisting Auditor',
-    email: 'r.garcia@bank.com.ph',
+    email: 'r.garcia@citysavings.com.ph',
     skills: 'Operations, Financial, Compliance',
   },
   {
     name: 'L. Fernandez',
     role: 'Assisting Auditor',
-    email: 'l.fernandez@bank.com.ph',
+    email: 'l.fernandez@citysavings.com.ph',
     skills: 'Branch audit, Compliance, Credit review',
   },
 ];
@@ -1514,121 +1959,121 @@ const DEFAULT_AUDITEE_DIRECTORY: AuditeeUnitRecord[] = [
     unit: 'Operations · Cash & clearing',
     head: 'R. Bautista',
     title: 'VP, Operations',
-    email: 'r.bautista@bank.com.ph',
+    email: 'r.bautista@citysavings.com.ph',
   },
   {
     unit: 'Operations · Billing & collection',
     head: 'R. Bautista',
     title: 'VP, Operations',
-    email: 'r.bautista@bank.com.ph',
+    email: 'r.bautista@citysavings.com.ph',
   },
   {
     unit: 'Operations · Records & Collateral',
     head: 'R. Bautista',
     title: 'VP, Operations',
-    email: 'r.bautista@bank.com.ph',
+    email: 'r.bautista@citysavings.com.ph',
   },
   {
     unit: 'Loan Release & Disbursement · Card ops',
     head: 'G. Soriano',
     title: 'AVP, Loan Release & Cards',
-    email: 'g.soriano@bank.com.ph',
+    email: 'g.soriano@citysavings.com.ph',
   },
   {
     unit: 'IT · Core banking (Temenos T24)',
     head: 'E. Navarro',
     title: 'VP, Chief Information Officer',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
   },
   {
     unit: 'IT · Digital channels',
     head: 'E. Navarro',
     title: 'VP, Chief Information Officer',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
   },
   {
     unit: 'IT · Payment switches',
     head: 'E. Navarro',
     title: 'VP, Chief Information Officer',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
   },
   {
     unit: 'IT · Network & Infrastructure Security',
     head: 'E. Navarro',
     title: 'VP, Chief Information Officer',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
   },
   {
     unit: 'IT & Operations · Mission-Critical Systems',
     head: 'E. Navarro',
     title: 'VP, Chief Information Officer',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
   },
   {
     unit: 'Lending · Salary loans',
     head: 'V. Pascual',
     title: 'VP, Consumer & Teacher Lending',
-    email: 'v.pascual@bank.com.ph',
+    email: 'v.pascual@citysavings.com.ph',
   },
   {
     unit: 'Lending · Product governance',
     head: 'V. Pascual',
     title: 'VP, Consumer & Teacher Lending',
-    email: 'v.pascual@bank.com.ph',
+    email: 'v.pascual@citysavings.com.ph',
   },
   {
     unit: 'Lending · Key Regional Hub',
     head: 'V. Pascual',
     title: 'VP, Consumer & Teacher Lending',
-    email: 'v.pascual@bank.com.ph',
+    email: 'v.pascual@citysavings.com.ph',
   },
   {
     unit: 'Compliance · AML / CFT',
     head: 'C. Dizon',
     title: 'Chief Compliance Officer',
-    email: 'c.dizon@bank.com.ph',
+    email: 'c.dizon@citysavings.com.ph',
   },
   {
     unit: 'Legal & Compliance · Accreditation',
     head: 'C. Dizon',
     title: 'Chief Compliance Officer',
-    email: 'c.dizon@bank.com.ph',
+    email: 'c.dizon@citysavings.com.ph',
   },
   {
     unit: 'Vendor Management & IT · Compliance',
     head: 'C. Dizon',
     title: 'Chief Compliance Officer',
-    email: 'c.dizon@bank.com.ph',
+    email: 'c.dizon@citysavings.com.ph',
   },
   {
     unit: 'Treasury · Liquidity',
     head: 'L. Mercado',
     title: 'VP, Treasurer',
-    email: 'l.mercado@bank.com.ph',
+    email: 'l.mercado@citysavings.com.ph',
   },
   {
     unit: 'Finance · General Ledger',
     head: 'L. Mercado',
     title: 'VP, Treasurer',
-    email: 'l.mercado@bank.com.ph',
+    email: 'l.mercado@citysavings.com.ph',
   },
   {
     unit: 'Branch Banking · Mindanao Region',
     head: 'G. Soriano',
     title: 'VP, Branch Banking',
-    email: 'g.soriano@bank.com.ph',
+    email: 'g.soriano@citysavings.com.ph',
   },
   {
     unit: 'Branch Banking · Visayas Region',
     head: 'G. Soriano',
     title: 'VP, Branch Banking',
-    email: 'g.soriano@bank.com.ph',
+    email: 'g.soriano@citysavings.com.ph',
   },
   {
     unit: 'Administrative Services · General services',
     head: 'M. Ocampo',
     title: 'AVP, Administrative Services',
-    email: 'm.ocampo@bank.com.ph',
+    email: 'm.ocampo@citysavings.com.ph',
   },
 ];
 
@@ -1822,7 +2267,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-1',
     name: 'M. Santos',
     title: 'Chief Audit Executive · Internal Audit',
-    email: 'm.santos@bank.com.ph',
+    email: 'm.santos@citysavings.com.ph',
     roles: ['System administrator', 'Chief Audit Executive'],
     scope: 'Full access',
     status: 'Active',
@@ -1837,10 +2282,28 @@ const DEFAULT_ACCESS_USERS = [
     isPrivileged: true,
   },
   {
+    id: 'acc-cm',
+    name: 'Christian John Macahilig',
+    title: 'Chief Audit Executive · Internal Audit',
+    email: 'christian.macahilig@citysavings.com.ph',
+    roles: ['System administrator', 'Chief Audit Executive'],
+    scope: 'Full access',
+    status: 'Active',
+    employeeNumber: 'CSB-00001',
+    dateGranted: '2026-01-15',
+    lastModified: '2026-01-15',
+    lastLoginDate: '—',
+    failedLoginCount: 0,
+    isLocked: false,
+    requiresPasswordChange: false,
+    mfaEnabled: true,
+    isPrivileged: true,
+  },
+  {
     id: 'acc-2',
     name: 'J. Dela Cruz',
     title: 'Audit Division Head · Internal Audit',
-    email: 'j.delacruz@bank.com.ph',
+    email: 'j.delacruz@citysavings.com.ph',
     roles: ['System administrator', 'Audit Division Head'],
     scope: 'Full access',
     status: 'Active',
@@ -1858,7 +2321,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-3',
     name: 'A. Villanueva',
     title: 'Supervising Auditor · Internal Audit',
-    email: 'a.villanueva@bank.com.ph',
+    email: 'a.villanueva@citysavings.com.ph',
     roles: ['Supervising Auditor'],
     scope: 'Assigned + team engagements',
     status: 'Active',
@@ -1876,7 +2339,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-4',
     name: 'P. Mendoza',
     title: 'Audit-in-Charge · Internal Audit',
-    email: 'p.mendoza@bank.com.ph',
+    email: 'p.mendoza@citysavings.com.ph',
     roles: ['Audit-in-Charge'],
     scope: 'Assigned engagements (AUD-2026-006)',
     status: 'Active',
@@ -1894,7 +2357,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-5',
     name: 'K. Lim',
     title: 'Assisting Auditor · Internal Audit',
-    email: 'k.lim@bank.com.ph',
+    email: 'k.lim@citysavings.com.ph',
     roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-004, AUD-2026-005, AUD-2026-007)',
     status: 'Active',
@@ -1912,7 +2375,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-6',
     name: 'D. Ramos',
     title: 'Assisting Auditor · Internal Audit',
-    email: 'd.ramos@bank.com.ph',
+    email: 'd.ramos@citysavings.com.ph',
     roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2027-003)',
     status: 'Active',
@@ -1930,7 +2393,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-7',
     name: 'B. Tolentino',
     title: 'Assisting Auditor · Internal Audit',
-    email: 'b.tolentino@bank.com.ph',
+    email: 'b.tolentino@citysavings.com.ph',
     roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-003, AUD-2027-001)',
     status: 'Active',
@@ -1948,7 +2411,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-8',
     name: 'R. Garcia',
     title: 'Assisting Auditor · Internal Audit',
-    email: 'r.garcia@bank.com.ph',
+    email: 'r.garcia@citysavings.com.ph',
     roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-001, AUD-2027-002)',
     status: 'Active',
@@ -1966,7 +2429,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-9',
     name: 'L. Fernandez',
     title: 'Assisting Auditor · Internal Audit',
-    email: 'l.fernandez@bank.com.ph',
+    email: 'l.fernandez@citysavings.com.ph',
     roles: ['Assisting Auditor'],
     scope: 'Assigned engagements (AUD-2026-002)',
     status: 'Active',
@@ -1984,7 +2447,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-10',
     name: 'R. Bautista',
     title: 'VP, Operations · Operations',
-    email: 'r.bautista@bank.com.ph',
+    email: 'r.bautista@citysavings.com.ph',
     roles: ['Auditee'],
     scope: 'Operations · Cash & clearing · Operations · Billing & collection',
     status: 'Active',
@@ -2002,7 +2465,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-11',
     name: 'E. Navarro',
     title: 'VP, Chief Information Officer · Information Technology',
-    email: 'e.navarro@bank.com.ph',
+    email: 'e.navarro@citysavings.com.ph',
     roles: ['Auditee'],
     scope: 'IT · Core banking (Temenos T24) · IT · Digital channels · IT · Payment switches',
     status: 'Active',
@@ -2020,7 +2483,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-12',
     name: 'V. Pascual',
     title: 'VP, Consumer & Teacher Lending · Lending',
-    email: 'v.pascual@bank.com.ph',
+    email: 'v.pascual@citysavings.com.ph',
     roles: ['Auditee'],
     scope: 'Lending · Salary loans · Lending · Product governance',
     status: 'Active',
@@ -2038,7 +2501,7 @@ const DEFAULT_ACCESS_USERS = [
     id: 'acc-13',
     name: 'C. Dizon',
     title: 'Chief Compliance Officer · Compliance',
-    email: 'c.dizon@bank.com.ph',
+    email: 'c.dizon@citysavings.com.ph',
     roles: ['Auditee'],
     scope: 'Compliance · AML / CFT',
     status: 'Active',
@@ -2090,6 +2553,7 @@ export const MasterDataSetupAccessView: React.FC<{
   onAddUserProfile?: (user: UserProfile) => void;
   onUpdateUserProfile?: (user: UserProfile) => void;
   onDeleteUserProfile?: (id: string) => void;
+  onResetSystemForUAT?: () => Promise<void> | void;
 }> = ({
   tab,
   currentUser,
@@ -2101,7 +2565,12 @@ export const MasterDataSetupAccessView: React.FC<{
   onAddUserProfile,
   onUpdateUserProfile,
   onDeleteUserProfile,
+  onResetSystemForUAT,
 }) => {
+  const isSystemAdmin =
+    Boolean(currentUser.headerSubtitle?.includes('System administrator')) ||
+    Boolean(currentUser.roleTitle?.includes('System administrator'));
+
   // ── Master data state with persistence ─────────────────────────────────────
   const [entityTypes, setEntityTypes] = useState<string[]>(DEFAULT_ENTITY_TYPES);
   const [newEntityType, setNewEntityType] = useState('');
@@ -2147,6 +2616,7 @@ export const MasterDataSetupAccessView: React.FC<{
   // ── Edit Access Modal State ────────────────────────────────────────────────
   const [editingAccessUser, setEditingAccessUser] = useState<any | null>(null);
   const [editFormName, setEditFormName] = useState('');
+  const [editFormEmail, setEditFormEmail] = useState('');
   const [editFormRole, setEditFormRole] = useState('Assisting Auditor');
   const [editFormScope, setEditFormScope] = useState('');
   const [editFormStatus, setEditFormStatus] = useState('Active');
@@ -2166,6 +2636,11 @@ export const MasterDataSetupAccessView: React.FC<{
     fetchMasterData('auditors', DEFAULT_AUDITORS).then(setAuditorsList);
     fetchMasterData('auditee_directory', DEFAULT_AUDITEE_DIRECTORY).then(setAuditeeDirectory);
     fetchMasterData('setup_checklist', DEFAULT_SETUP_ITEMS).then(setSetupItems);
+    fetchMasterData('access_users_registry', DEFAULT_ACCESS_USERS).then((saved) => {
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        setAccessUsers(saved);
+      }
+    });
     fetchMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX).then((saved) => {
       if (saved && Array.isArray(saved) && saved.length > 0) {
         setMatrixRows(saved);
@@ -2176,38 +2651,52 @@ export const MasterDataSetupAccessView: React.FC<{
   // Sync access users whenever userProfiles from Supabase change
   useEffect(() => {
     if (userProfiles && userProfiles.length > 0) {
-      const dbUsers = userProfiles.map((p) => ({
-        id: p.id,
-        name: p.name,
-        title: `${p.roleTitle || 'Internal Auditor'} · ${p.department || 'Internal Audit'}`,
-        email: p.name.toLowerCase().replace(/\s+/g, '.') + '@bank.com.ph',
-        roles: (() => {
-          if (p.headerSubtitle) {
-            const role = normalizeRole(p.headerSubtitle);
-            return [role];
-          }
-          if (p.canApproveCAE) return ['Chief Audit Executive'];
-          if (p.canApproveHead) return ['Chief Audit Executive'];
-          if (p.canApproveIndependent) return ['Audit Division Head'];
-          if (p.roleTitle?.toLowerCase().includes('division head')) return ['Audit Division Head'];
-          if (p.roleTitle?.toLowerCase().includes('supervising')) return ['Supervising Auditor'];
-          if (p.roleTitle?.toLowerCase().includes('charge') || p.roleTitle?.toLowerCase().includes('aic')) return ['Audit-in-Charge'];
-          if (p.roleTitle?.toLowerCase().includes('manager')) return ['Audit Division Head'];
-          if (p.roleTitle?.toLowerCase().includes('auditee')) return ['Auditee'];
-          return ['Assisting Auditor'];
-        })(),
-        scope: p.department === 'Internal Audit' ? 'Full access' : `${p.department} operations`,
-        status: p.accountStatus || 'Active',
-        employeeNumber: p.employeeNumber || 'EMP-DB',
-        dateGranted: '2026-01-15',
-        lastModified: '2026-01-15',
-        lastLoginDate: '—',
-        failedLoginCount: p.failedLoginCount || 0,
-        isLocked: p.isLocked || false,
-        requiresPasswordChange: p.requiresPasswordChange || false,
-        mfaEnabled: p.mfaEnabled || false,
-        isPrivileged: p.isPrivileged || false,
-      }));
+      const dbUsers = userProfiles.map((p) => {
+        // Priority for user email:
+        // 1. Explicit profile email
+        // 2. Existing email in accessUsers or saved registry
+        // 3. Fallback CitySavings Bank corporate email
+        const existing = accessUsers.find(
+          (u) => u.id === p.id || u.name.toLowerCase() === p.name.toLowerCase()
+        );
+        const resolvedEmail =
+          p.email ||
+          existing?.email ||
+          `${p.name.toLowerCase().replace(/[^a-z0-9]/g, '.')}@citysavings.com.ph`;
+
+        return {
+          id: p.id,
+          name: p.name,
+          title: `${p.roleTitle || 'Internal Auditor'} · ${p.department || 'Internal Audit'}`,
+          email: resolvedEmail,
+          roles: (() => {
+            if (p.headerSubtitle) {
+              const role = normalizeRole(p.headerSubtitle);
+              return [role];
+            }
+            if (p.canApproveCAE) return ['Chief Audit Executive'];
+            if (p.canApproveHead) return ['Chief Audit Executive'];
+            if (p.canApproveIndependent) return ['Audit Division Head'];
+            if (p.roleTitle?.toLowerCase().includes('division head')) return ['Audit Division Head'];
+            if (p.roleTitle?.toLowerCase().includes('supervising')) return ['Supervising Auditor'];
+            if (p.roleTitle?.toLowerCase().includes('charge') || p.roleTitle?.toLowerCase().includes('aic')) return ['Audit-in-Charge'];
+            if (p.roleTitle?.toLowerCase().includes('manager')) return ['Audit Division Head'];
+            if (p.roleTitle?.toLowerCase().includes('auditee')) return ['Auditee'];
+            return ['Assisting Auditor'];
+          })(),
+          scope: p.department === 'Internal Audit' ? 'Full access' : `${p.department} operations`,
+          status: p.accountStatus || 'Active',
+          employeeNumber: p.employeeNumber || 'EMP-DB',
+          dateGranted: '2026-01-15',
+          lastModified: '2026-01-15',
+          lastLoginDate: '—',
+          failedLoginCount: p.failedLoginCount || 0,
+          isLocked: p.isLocked || false,
+          requiresPasswordChange: p.requiresPasswordChange || false,
+          mfaEnabled: p.mfaEnabled || false,
+          isPrivileged: p.isPrivileged || false,
+        };
+      });
 
       // Merge ensuring DB profiles are prioritized and baseline accounts are retained
       const merged: any[] = [...dbUsers];
@@ -2217,6 +2706,7 @@ export const MasterDataSetupAccessView: React.FC<{
         }
       });
       setAccessUsers(merged as any);
+      saveMasterData('access_users_registry', merged);
     }
   }, [userProfiles]);
 
@@ -2318,6 +2808,7 @@ export const MasterDataSetupAccessView: React.FC<{
   const handleOpenEditAccess = (usr: any) => {
     setEditingAccessUser(usr);
     setEditFormName(usr.name);
+    setEditFormEmail(usr.email || '');
     setEditFormRole(normalizeRole(usr.roles[0]) || 'Assisting Auditor');
     setEditFormScope(usr.scope || 'Assigned engagements');
     setEditFormStatus(usr.status || 'Active');
@@ -2334,13 +2825,15 @@ export const MasterDataSetupAccessView: React.FC<{
     const canApproveHead = editFormRole === 'Chief Audit Executive' || editFormRole === 'System administrator';
     const canApproveIndependent = editFormRole === 'Audit Division Head' || editFormRole === 'Supervising Auditor';
     const canApproveCAE = editFormRole === 'Chief Audit Executive';
+    const updatedEmail = editFormEmail.trim() || editingAccessUser.email;
 
-    setAccessUsers((prev) =>
-      prev.map((item) => {
+    setAccessUsers((prev) => {
+      const updated = prev.map((item) => {
         if (item.id !== targetId) return item;
         return {
           ...item,
           name: editFormName.trim() || item.name,
+          email: updatedEmail,
           roles: [editFormRole],
           title: `${editFormRole} · Internal Audit`,
           scope: editFormScope.trim() || item.scope,
@@ -2350,13 +2843,16 @@ export const MasterDataSetupAccessView: React.FC<{
           isPrivileged: editFormPrivileged,
           lastModified: new Date().toISOString().slice(0, 10),
         } as any;
-      })
-    );
+      });
+      saveMasterData('access_users_registry', updated);
+      return updated;
+    });
 
     if (onUpdateUserProfile) {
       onUpdateUserProfile({
         id: targetId,
         name: editFormName.trim() || editingAccessUser.name,
+        email: updatedEmail,
         roleTitle: `${editFormRole} (Internal Audit)`,
         fullLabel: `${editFormName.trim() || editingAccessUser.name} – ${editFormRole}`,
         headerSubtitle: editFormRole,
@@ -2488,7 +2984,7 @@ export const MasterDataSetupAccessView: React.FC<{
       unit: auditeeFormUnit.trim(),
       head: auditeeFormHead.trim(),
       title: auditeeFormTitle.trim() || 'Unit Head',
-      email: auditeeFormEmail.trim() || 'auditee@bank.com.ph',
+      email: auditeeFormEmail.trim() || 'auditee@citysavings.com.ph',
     };
 
     let updated: AuditeeUnitRecord[];
@@ -2695,7 +3191,11 @@ export const MasterDataSetupAccessView: React.FC<{
       mfaEnabled: false,
       isPrivileged: newUserRole === 'System administrator',
     };
-    setAccessUsers((prev) => [...prev, newAcc as any]);
+    setAccessUsers((prev) => {
+      const updated = [...prev, newAcc as any];
+      saveMasterData('access_users_registry', updated);
+      return updated;
+    });
     const canApproveHead = newUserRole === 'Chief Audit Executive' || newUserRole === 'System administrator';
     const canApproveIndependent = newUserRole === 'Audit Division Head' || newUserRole === 'Supervising Auditor';
     const canApproveCAE = newUserRole === 'Chief Audit Executive';
@@ -2704,6 +3204,7 @@ export const MasterDataSetupAccessView: React.FC<{
       onAddUserProfile({
         id: newAcc.id,
         name: newAcc.name,
+        email: newAcc.email,
         roleTitle: `${newUserRole} (Internal Audit)`,
         fullLabel: `${newAcc.name} – ${newUserRole}`,
         headerSubtitle: newUserRole,
@@ -3207,7 +3708,7 @@ export const MasterDataSetupAccessView: React.FC<{
                     required
                     value={auditorFormEmail}
                     onChange={(e) => setAuditorFormEmail(e.target.value)}
-                    placeholder="s.magsaysay@bank.com.ph"
+                    placeholder="s.magsaysay@citysavings.com.ph"
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   />
                 </div>
@@ -3300,7 +3801,7 @@ export const MasterDataSetupAccessView: React.FC<{
                     type="email"
                     value={auditeeFormEmail}
                     onChange={(e) => setAuditeeFormEmail(e.target.value)}
-                    placeholder="m.ocampo@bank.com.ph"
+                    placeholder="m.ocampo@citysavings.com.ph"
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   />
                 </div>
@@ -3390,6 +3891,19 @@ export const MasterDataSetupAccessView: React.FC<{
                 className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-md transition-colors cursor-pointer"
               >
                 Reset checklist
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  handleResetChecklist();
+                  if (onResetSystemForUAT) {
+                    await onResetSystemForUAT();
+                  }
+                  notifyAccess('success', 'System successfully reset to clean baseline state. Ready for UAT testing.');
+                }}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+              >
+                Reset System for UAT
               </button>
             </div>
           </div>
@@ -3692,12 +4206,37 @@ export const MasterDataSetupAccessView: React.FC<{
               className="px-3.5 py-2 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold rounded-md cursor-pointer whitespace-nowrap">
               ↓ Export UAM list (CSV)
             </button>
-            <button type="button" onClick={() => setShowAddUserForm((v) => !v)}
-              className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer shrink-0">
-              {showAddUserForm ? 'Cancel' : 'Add user account'}
+            <button
+              type="button"
+              onClick={() => {
+                if (accessActive && !isSystemAdmin) {
+                  notifyAccess('error', 'LAC-1: User account creation is restricted to System Administrators.');
+                  return;
+                }
+                setShowAddUserForm((v) => !v);
+              }}
+              className={`px-3.5 py-2 text-white text-xs font-semibold rounded-md cursor-pointer shrink-0 ${
+                accessActive && !isSystemAdmin ? 'bg-slate-400 hover:bg-slate-500' : 'bg-[#492785] hover:bg-[#3b1f6b]'
+              }`}
+            >
+              {showAddUserForm ? 'Cancel' : accessActive && !isSystemAdmin ? 'Add user account (Admin only)' : 'Add user account'}
             </button>
           </div>
         </div>
+
+        {accessActive && !isSystemAdmin && (
+          <div className="mt-3 px-3.5 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">🔒 View-Only Mode (LAC-1 / LAC-3):</span>
+              <span>
+                Signed in as <strong>{currentUser.name}</strong> ({currentUser.headerSubtitle}). User account creation, role editing, and password resets require <strong>System administrator</strong> authority.
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase">
+              Role Authority Enforced
+            </span>
+          </div>
+        )}
 
         {/* Add user form */}
         {showAddUserForm && (
@@ -3718,7 +4257,7 @@ export const MasterDataSetupAccessView: React.FC<{
                 <label className="block text-xs font-medium text-slate-700 mb-1">Email / UPN * <span className="text-slate-400 font-normal">(becomes username)</span></label>
                 <input type="email" autoComplete="off" value={newUserEmail}
                   onChange={(e) => { setNewUserEmail(e.target.value); setNewUserNameError(''); setNewUserFormError(''); }}
-                  placeholder="s.magsaysay@bank.com.ph"
+                  placeholder="s.magsaysay@citysavings.com.ph"
                   className={`w-full px-3 py-2 bg-white border rounded-md text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#492785] ${newUserNameError ? 'border-red-400 bg-red-50/30' : 'border-slate-300'}`} />
                 {newUserNameError && <div className="text-xs text-red-700 mt-1 font-medium">{newUserNameError}</div>}
               </div>
@@ -4084,56 +4623,60 @@ export const MasterDataSetupAccessView: React.FC<{
                         <button type="button"
                           onClick={() => handleOpenEditAccess(usr)}
                           className="px-2 py-1 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded text-[10px] font-semibold cursor-pointer whitespace-nowrap">
-                          Edit access
+                          {accessActive && !isSystemAdmin ? 'View access' : 'Edit access'}
                         </button>
                         <button type="button"
                           onClick={() => { const found = userProfiles.find((u: UserProfile) => u.name === usr.name); if (found) { onChangeUser(found); } else { const normR = normalizeRole(usr.roles[0]); onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: normR, department: usr.title, canApproveHead: normR === 'Chief Audit Executive' || normR === 'System administrator', canApproveIndependent: normR === 'Audit Division Head' || normR === 'Supervising Auditor', canApproveCAE: normR === 'Chief Audit Executive' }); } }}
                           className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
                           Impersonate
                         </button>
-                        <button type="button"
-                          onClick={() => handleGenerateTempPw(usr.id)}
-                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
-                          Reset PW
-                        </button>
-                        <button type="button"
-                          onClick={() => {
-                            setAccessUsers((prev) =>
-                              prev.map((item) => {
-                                if (item.id !== usr.id) return item;
-                                const nextStatus = item.status === 'Active' ? 'Suspended' : 'Active';
-                                const normR = normalizeRole(usr.roles[0]);
-                                if (onUpdateUserProfile) {
-                                  onUpdateUserProfile({
-                                    id: usr.id,
-                                    name: usr.name,
-                                    roleTitle: usr.title,
-                                    fullLabel: `${usr.name} – ${normR}`,
-                                    headerSubtitle: normR,
-                                    department: 'Internal Audit',
-                                    canApproveHead: normR === 'Chief Audit Executive' || normR === 'System administrator',
-                                    canApproveIndependent: normR === 'Audit Division Head' || normR === 'Supervising Auditor',
-                                    canApproveCAE: normR === 'Chief Audit Executive',
-                                    accountStatus: nextStatus === 'Active' ? 'Active' : 'Inactive',
-                                  });
+                        {(!accessActive || isSystemAdmin) && (
+                          <>
+                            <button type="button"
+                              onClick={() => handleGenerateTempPw(usr.id)}
+                              className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
+                              Reset PW
+                            </button>
+                            <button type="button"
+                              onClick={() => {
+                                setAccessUsers((prev) =>
+                                  prev.map((item) => {
+                                    if (item.id !== usr.id) return item;
+                                    const nextStatus = item.status === 'Active' ? 'Suspended' : 'Active';
+                                    const normR = normalizeRole(usr.roles[0]);
+                                    if (onUpdateUserProfile) {
+                                      onUpdateUserProfile({
+                                        id: usr.id,
+                                        name: usr.name,
+                                        roleTitle: usr.title,
+                                        fullLabel: `${usr.name} – ${normR}`,
+                                        headerSubtitle: normR,
+                                        department: 'Internal Audit',
+                                        canApproveHead: normR === 'Chief Audit Executive' || normR === 'System administrator',
+                                        canApproveIndependent: normR === 'Audit Division Head' || normR === 'Supervising Auditor',
+                                        canApproveCAE: normR === 'Chief Audit Executive',
+                                        accountStatus: nextStatus === 'Active' ? 'Active' : 'Inactive',
+                                      });
+                                    }
+                                    return { ...item, status: nextStatus } as any;
+                                  })
+                                );
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
+                              {usr.status === 'Active' ? 'Suspend' : 'Activate'}
+                            </button>
+                            <button type="button"
+                              onClick={() => {
+                                setAccessUsers((prev) => prev.filter((item) => item.id !== usr.id));
+                                if (onDeleteUserProfile) {
+                                  onDeleteUserProfile(usr.id);
                                 }
-                                return { ...item, status: nextStatus } as any;
-                              })
-                            );
-                          }}
-                          className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
-                          {usr.status === 'Active' ? 'Suspend' : 'Activate'}
-                        </button>
-                        <button type="button"
-                          onClick={() => {
-                            setAccessUsers((prev) => prev.filter((item) => item.id !== usr.id));
-                            if (onDeleteUserProfile) {
-                              onDeleteUserProfile(usr.id);
-                            }
-                          }}
-                          className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-medium cursor-pointer">
-                          Remove
-                        </button>
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-medium cursor-pointer">
+                              Remove
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -4225,6 +4768,23 @@ export const MasterDataSetupAccessView: React.FC<{
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
+                    Email Address / Corporate UPN *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editFormEmail}
+                    onChange={(e) => setEditFormEmail(e.target.value)}
+                    placeholder="e.g. christian.macahilig@citysavings.com.ph"
+                    className="w-full px-3 py-2 border border-slate-300 rounded text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Official corporate email address (e.g. @citysavings.com.ph or @citysaving.com.ph).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
                     Internal Audit Role *
                   </label>
                   <select
@@ -4299,20 +4859,28 @@ export const MasterDataSetupAccessView: React.FC<{
                   </label>
                 </div>
 
+                {accessActive && !isSystemAdmin && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 text-xs font-medium">
+                    🔒 View-Only Mode (LAC-1): You are inspecting this user&apos;s access configuration. Modifying roles, credentials, or scopes requires System Administrator authority.
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-4">
                   <button
                     type="button"
                     onClick={() => setEditingAccessUser(null)}
                     className="px-3.5 py-1.5 border border-slate-300 rounded-md font-semibold text-slate-700 cursor-pointer hover:bg-slate-50"
                   >
-                    Cancel
+                    {accessActive && !isSystemAdmin ? 'Close' : 'Cancel'}
                   </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
-                  >
-                    Save Changes
-                  </button>
+                  {(!accessActive || isSystemAdmin) && (
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded-md font-semibold cursor-pointer"
+                    >
+                      Save Changes
+                    </button>
+                  )}
                 </div>
               </form>
             </div>
