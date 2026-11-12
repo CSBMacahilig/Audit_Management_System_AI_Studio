@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { AuditEngagement, RiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
+import React, { useEffect, useState } from 'react';
+import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
+import { fetchMasterData } from '../utils/db';
+
+const DEFAULT_AUDIT_TYPES = [
+  'Financial audit',
+  'Operational audit',
+  'Compliance audit',
+  'IT audit',
+  'Thematic audit',
+];
 
 interface AnnualPlanViewProps {
   engagements: AuditEngagement[];
@@ -28,13 +37,23 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
 
   // New audit form state
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Financial');
+  const [newCategory, setNewCategory] = useState(DEFAULT_AUDIT_TYPES[0]);
+  const [auditTypes, setAuditTypes] = useState(DEFAULT_AUDIT_TYPES);
   const [newEntity, setNewEntity] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
   const [newLead, setNewLead] = useState('A. Villanueva');
   const [newStart, setNewStart] = useState('2 Nov');
   const [newEnd, setNewEnd] = useState('11 Dec 2026');
+
+  useEffect(() => {
+    fetchMasterData('audit_types', DEFAULT_AUDIT_TYPES).then((types) => {
+      if (types.length > 0) {
+        setAuditTypes(types);
+        setNewCategory((current) => types.includes(current) ? current : types[0]);
+      }
+    });
+  }, []);
 
   const filteredEngagements = engagements.filter((eng) => {
     const matchesSearch =
@@ -52,10 +71,8 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  const getRiskBadgeColor = (level: RiskLevel) => {
+  const getRiskBadgeColor = (level: AuditRiskLevel) => {
     switch (level) {
-      case 'Critical':
-        return 'bg-[#B93829] text-white';
       case 'High':
         return 'bg-[#D97724] text-white';
       case 'Medium':
@@ -131,8 +148,8 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     e.preventDefault();
     if (!newTitle.trim() || !newEntity.trim()) return;
     const score = newLikelihood * newImpact;
-    const riskLevel: RiskLevel =
-      score >= 20 ? 'Critical' : score >= 10 ? 'High' : score >= 5 ? 'Medium' : 'Low';
+    const riskLevel: AuditRiskLevel =
+      score >= 15 ? 'High' : score >= 8 ? 'Medium' : 'Low';
     const nextNum = engagements.length + 1;
     const ref = `AUD-${selectedYear}-0${nextNum < 10 ? '0' + nextNum : nextNum}`;
 
@@ -220,7 +237,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             type="button"
             onClick={() => {
               onDraftFromUniverse();
-              setBannerMessage('Drafted overdue Critical/High entities from the Audit Universe into the Annual Plan.');
+              setBannerMessage('Drafted overdue high-risk entities from the Audit Universe into the Annual Plan.');
             }}
             className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-md border border-slate-300 transition-colors cursor-pointer whitespace-nowrap"
           >
@@ -415,18 +432,16 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Audit Category
+                    Audit Type
                   </label>
                   <select
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   >
-                    <option value="Financial">Financial</option>
-                    <option value="Information security">Information security</option>
-                    <option value="Credit review">Credit review</option>
-                    <option value="Operations">Operations</option>
-                    <option value="Compliance">Compliance</option>
+                    {auditTypes.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -551,7 +566,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                 <strong className="font-mono-tabular">2,520 hours (6 FTE auditors)</strong>
               </div>
               <div className="flex justify-between">
-                <span>Critical Risk Coverage (6-month cycle):</span>
+                <span>High Risk Coverage (12-month cycle):</span>
                 <strong className="font-mono-tabular">100% scheduled</strong>
               </div>
               <div className="flex justify-between">

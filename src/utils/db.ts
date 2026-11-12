@@ -512,12 +512,12 @@ export async function deleteUserProfile(id: string): Promise<void> {
 // Audit frequencies
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface AuditFrequencies { critical: number; high: number; medium: number; low: number; }
+export interface AuditFrequencies { high: number; medium: number; low: number; }
 
 export async function fetchFrequencies(): Promise<AuditFrequencies> {
   const { data, error } = await supabase.from('audit_frequencies').select('*').eq('id', 'global').single();
-  if (error || !data) return { critical: 6, high: 12, medium: 24, low: 36 };
-  return { critical: data.critical, high: data.high, medium: data.medium, low: data.low };
+  if (error || !data) return { high: 12, medium: 24, low: 36 };
+  return { high: data.high, medium: data.medium, low: data.low };
 }
 
 export async function saveFrequencies(freq: AuditFrequencies): Promise<void> {
@@ -587,36 +587,36 @@ export async function saveMasterData<T>(key: string, value: T): Promise<void> {
 }
 
 export async function resetSystemToBaseline(): Promise<void> {
-  try {
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (
-        k &&
-        (k.startsWith('ams_') ||
-          k.startsWith('bssc_') ||
-          k.includes('master_data') ||
-          k.includes('access_users') ||
-          k.includes('setup_checklist'))
-      ) {
-        keysToRemove.push(k);
-      }
+  const tables = [
+    'working_notes',
+    'findings',
+    'timeline_activities',
+    'engagement_files',
+    'activity_logs',
+    'engagements',
+    'issues_register',
+    'universe_entities',
+    'sizing_configs',
+    'audit_frequencies',
+    'master_data',
+  ] as const;
+
+  for (const table of tables) {
+    const records = supabase.from(table).delete();
+    const { error } = table === 'master_data'
+      ? await records.neq('id', 'app_roles')
+      : await records.not('id', 'is', null);
+    if (error) {
+      throw new Error(`Could not reset ${table}: ${error.message}`);
     }
-    keysToRemove.forEach((k) => localStorage.removeItem(k));
-  } catch (err) {
-    console.warn('localStorage clean failed:', err);
   }
 
-  try {
-    await supabase.from('audit_frequencies').upsert({
-      id: 'global',
-      critical: 12,
-      high: 12,
-      medium: 24,
-      low: 36,
-      updated_at: new Date().toISOString(),
-    });
-  } catch {
-    // ignore
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith('ams_') || key?.startsWith('bssc_')) {
+      keysToRemove.push(key);
+    }
   }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
 }

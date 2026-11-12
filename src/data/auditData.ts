@@ -193,9 +193,9 @@ export const USERS: UserProfile[] = [
     id: 'a-villanueva',
     name: 'A. Villanueva',
     email: 'a.villanueva@citysavings.com.ph',
-    roleTitle: 'Supervising Auditor (Internal Audit)',
-    fullLabel: 'A. Villanueva – Supervising Auditor (Internal Audit)',
-    headerSubtitle: 'Supervising Auditor',
+    roleTitle: 'Audit Supervisor (Internal Audit)',
+    fullLabel: 'A. Villanueva – Audit Supervisor (Internal Audit)',
+    headerSubtitle: 'Audit Supervisor',
     department: 'Internal Audit',
     canApproveHead: false,
     canApproveIndependent: true,
@@ -307,6 +307,7 @@ export const USERS: UserProfile[] = [
 ];
 
 export type RiskLevel = 'Critical' | 'High' | 'Medium' | 'Low';
+export type AuditRiskLevel = 'High' | 'Medium' | 'Low';
 export type AuditStatus = 'Closed' | 'Reporting' | 'In progress' | 'Scheduled' | 'Planned';
 
 export interface WorkingNote {
@@ -327,7 +328,7 @@ export interface AuditFinding {
   id: string;
   ref: string;
   title: string;
-  severity: RiskLevel;
+  severity: string;
   condition: string;
   criteria: string;
   cause: string;
@@ -377,7 +378,7 @@ export interface AuditEngagement {
   likelihood: number;
   impact: number;
   riskScore: number;
-  riskLevel: RiskLevel;
+  riskLevel: AuditRiskLevel;
   lead: string;
   headReviewer: string;
   independentReviewer: string;
@@ -413,7 +414,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'A. Villanueva',
     headReviewer: 'M. Santos',
     independentReviewer: 'K. Lim',
@@ -549,7 +550,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'J. Reyes',
     headReviewer: 'M. Santos',
     independentReviewer: 'P. Mendoza',
@@ -604,7 +605,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'A. Villanueva',
     headReviewer: 'M. Santos',
     independentReviewer: 'K. Lim',
@@ -639,7 +640,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 5,
     impact: 4,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'K. Lim',
     headReviewer: 'M. Santos',
     independentReviewer: 'A. Villanueva',
@@ -756,7 +757,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'P. Mendoza',
     headReviewer: 'M. Santos',
     independentReviewer: 'Not needed',
@@ -1054,7 +1055,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'A. Villanueva',
     headReviewer: 'M. Santos',
     independentReviewer: 'K. Lim',
@@ -1088,7 +1089,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'A. Villanueva',
     headReviewer: 'M. Santos',
     independentReviewer: 'K. Lim',
@@ -1122,7 +1123,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'B. Tolentino',
     headReviewer: 'M. Santos',
     independentReviewer: 'A. Villanueva',
@@ -1156,7 +1157,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'D. Ramos',
     headReviewer: 'M. Santos',
     independentReviewer: 'A. Villanueva',
@@ -1190,7 +1191,7 @@ const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lead: 'B. Tolentino',
     headReviewer: 'M. Santos',
     independentReviewer: 'P. Mendoza',
@@ -1328,7 +1329,7 @@ const EXTRA_PLANNED_ENGAGEMENTS: AuditEngagement[] = Array.from({ length: 162 },
   const l = idx % 3 === 0 ? 4 : 3;
   const i = idx % 2 === 0 ? 4 : 3;
   const score = l * i;
-  const riskLevel: RiskLevel = score >= 10 ? 'High' : 'Medium';
+  const riskLevel: AuditRiskLevel = score >= 10 ? 'High' : 'Medium';
   return {
     id: `aud-2027-${refNum}`,
     ref: `AUD-2027-${refNum}`,
@@ -1389,7 +1390,7 @@ export interface UniverseEntity {
   likelihood: number;
   impact: number;
   riskScore: number;
-  riskLevel: RiskLevel;
+  riskLevel: AuditRiskLevel;
   lastAudited: string;
   nextDue: string;
   cycleMonths: number;
@@ -1406,7 +1407,7 @@ export const INITIAL_UNIVERSE: UniverseEntity[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lastAudited: '13 Mar 2026',
     nextDue: '13 Sept 2026',
     cycleMonths: 6,
@@ -1421,7 +1422,7 @@ export const INITIAL_UNIVERSE: UniverseEntity[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lastAudited: '24 Apr 2026',
     nextDue: '24 Oct 2026',
     cycleMonths: 6,
@@ -1436,7 +1437,7 @@ export const INITIAL_UNIVERSE: UniverseEntity[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lastAudited: '5 Jun 2026',
     nextDue: '5 Dec 2026',
     cycleMonths: 6,
@@ -1451,7 +1452,7 @@ export const INITIAL_UNIVERSE: UniverseEntity[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     lastAudited: 'In Reporting (Oct 2026)',
     nextDue: 'Apr 2027',
     cycleMonths: 6,
@@ -1587,7 +1588,7 @@ export interface UniverseRecord {
   likelihood: number;
   impact: number;
   riskScore: number;
-  riskLevel: RiskLevel;
+  riskLevel: AuditRiskLevel;
   cycleMonths: number;
   lastAudit: string;
   nextDue: string;
@@ -1604,7 +1605,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '13 Mar 2026',
     nextDue: '13 Sept 2026',
@@ -1619,7 +1620,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 5,
     impact: 4,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '20 Nov 2025',
     nextDue: '20 May 2026',
@@ -1634,7 +1635,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '5 Jun 2026',
     nextDue: '5 Dec 2026',
@@ -1754,7 +1755,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '30 Apr 2026',
     nextDue: '30 Oct 2026',
@@ -1829,7 +1830,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 4,
     impact: 5,
     riskScore: 20,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '25 Apr 2026',
     nextDue: '25 Oct 2026',
@@ -1844,7 +1845,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '24 Apr 2026',
     nextDue: '24 Oct 2026',
@@ -1934,7 +1935,7 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
     likelihood: 5,
     impact: 5,
     riskScore: 25,
-    riskLevel: 'Critical',
+    riskLevel: 'High',
     cycleMonths: 6,
     lastAudit: '15 Dec 2025',
     nextDue: '15 Jun 2026',
@@ -1972,10 +1973,9 @@ const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
   },
 ];
 
-// Generate remaining universe entities to match exact 160 total (30 Critical, 82 High, 45 Medium, 3 Low)
+// Generate remaining universe entities to match the configured three-tier risk scale.
 // Heat map breakdown:
-// L=5: I=1(0), I=2(1 High), I=3(2 High), I=4(9 Critical), I=5(9 Critical) -> 18 Critical, 3 High
-// L=4: I=1(0), I=2(5 Medium), I=3(23 High), I=4(53 High), I=5(12 Critical) -> 12 Critical, 76 High, 5 Medium
+// High-risk scores use the top risk tier; Critical remains a finding severity only.
 // L=3: I=1(0), I=2(8 Medium), I=3(32 Medium), I=4(3 High), I=5(0) -> 3 High, 40 Medium
 // L=2: I=1(0), I=2(3 Low), I=3(0), I=4(0), I=5(0) -> 3 Low
 // L=1: all 0
@@ -1986,7 +1986,7 @@ const EXTRA_UNIVERSE_SPECS: {
   owner: string;
   l: number;
   i: number;
-  level: RiskLevel;
+  level: AuditRiskLevel;
   cycle: number;
 }[] = [
   // Remaining Critical (23 more to reach 30 Critical total: 6 at L=5,I=5; 8 at L=5,I=4; 9 at L=4,I=5)
@@ -1997,7 +1997,7 @@ const EXTRA_UNIVERSE_SPECS: {
     owner: 'E. Navarro',
     l: 5,
     i: 5,
-    level: 'Critical' as const,
+    level: 'High' as const,
     cycle: 6,
   })),
   ...Array.from({ length: 8 }, (_, idx) => ({
@@ -2007,7 +2007,7 @@ const EXTRA_UNIVERSE_SPECS: {
     owner: 'R. Bautista',
     l: 5,
     i: 4,
-    level: 'Critical' as const,
+    level: 'High' as const,
     cycle: 6,
   })),
   ...Array.from({ length: 9 }, (_, idx) => ({
@@ -2017,7 +2017,7 @@ const EXTRA_UNIVERSE_SPECS: {
     owner: 'V. Pascual',
     l: 4,
     i: 5,
-    level: 'Critical' as const,
+    level: 'High' as const,
     cycle: 6,
   })),
   // Remaining High (79 more to reach 82 High total)
@@ -2115,7 +2115,7 @@ export interface IssueRegisterItem {
   title: string;
   auditRef: string;
   auditTitle: string;
-  severity: RiskLevel;
+  severity: string;
   owner: string;
   ownerUnit: string;
   originalDue: string;

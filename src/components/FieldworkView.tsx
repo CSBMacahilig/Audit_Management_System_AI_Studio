@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AuditEngagement,
   AuditFile,
   AuditFinding,
   EngagementSubTabId,
   LifecycleStageId,
-  RiskLevel,
   UserProfile,
   WorkingNote,
 } from '../data/auditData';
@@ -15,6 +14,9 @@ import {
   sanitizeText,
   validateFileUpload,
 } from '../utils/security';
+import { fetchMasterData } from '../utils/db';
+
+const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 
 interface FieldworkViewProps {
   engagements: AuditEngagement[];
@@ -103,7 +105,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   // Findings sub-tab state
   const [showNewFindingModal, setShowNewFindingModal] = useState(false);
   const [fndTitle, setFndTitle] = useState('');
-  const [fndSeverity, setFndSeverity] = useState<RiskLevel>('High');
+  const [fndSeverity, setFndSeverity] = useState('High');
+  const [findingSeverities, setFindingSeverities] = useState(DEFAULT_FINDING_SEVERITIES);
   const [fndCondition, setFndCondition] = useState('');
   const [fndCriteria, setFndCriteria] = useState('');
   const [fndCause, setFndCause] = useState('');
@@ -112,6 +115,15 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   const [fndOwner, setFndOwner] = useState('E. Navarro (IT)');
   const [fndTargetDate, setFndTargetDate] = useState('30 Nov 2026');
   const [fndLinkedNote, setFndLinkedNote] = useState('WN-002');
+
+  useEffect(() => {
+    fetchMasterData('finding_severities', DEFAULT_FINDING_SEVERITIES).then((severities) => {
+      if (severities.length > 0) {
+        setFindingSeverities(severities);
+        setFndSeverity((current) => severities.includes(current) ? current : severities[0]);
+      }
+    });
+  }, []);
 
   // Auditee sub-tab state (Inquiries & PBC requests + Action plan editing)
   const [inquiries, setInquiries] = useState<AuditeeInquiry[]>([
@@ -2089,13 +2101,12 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   </label>
                   <select
                     value={fndSeverity}
-                    onChange={(e) => setFndSeverity(e.target.value as RiskLevel)}
+                    onChange={(e) => setFndSeverity(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   >
-                    <option value="Critical">Critical</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
+                    {findingSeverities.map((severity) => (
+                      <option key={severity} value={severity}>{severity}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

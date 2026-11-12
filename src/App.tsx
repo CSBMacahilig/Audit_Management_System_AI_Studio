@@ -18,6 +18,7 @@ import { FieldworkView } from './components/FieldworkView';
 import { SettingsView } from './components/SettingsView';
 import {
   AuditUniverseView,
+  DEFAULT_SETUP_ITEMS,
   IssuesView,
   MasterDataSetupAccessView,
   OverviewView,
@@ -25,7 +26,7 @@ import {
 } from './components/AdditionalViews';
 import { LoginPage, ForcePasswordChange } from './components/LoginPage';
 import { AdminUserManagement } from './components/AdminUserManagement';
-import { canAccessTab } from './utils/rbac';
+import { canAccessTab, DEFAULT_ROLE_DEFINITIONS } from './utils/rbac';
 import { AccessGuard } from './components/AccessGuard';
 import {
   AuthSession,
@@ -39,6 +40,7 @@ import {
   fetchUniverse,
   fetchUserProfiles,
   fetchFrequencies,
+  fetchMasterData,
   upsertEngagement,
   upsertIssue,
   upsertWorkingNote,
@@ -47,6 +49,8 @@ import {
   insertFile,
   insertActivityLog,
   saveFrequencies,
+  resetSystemToBaseline,
+  saveMasterData,
   upsertUniverseEntity,
   deleteUniverseEntity,
   upsertUserProfile,
@@ -115,7 +119,6 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(true);
 
   const [frequencies, setFrequenciesState] = useState<AuditFrequencies>({
-    critical: 6,
     high: 12,
     medium: 24,
     low: 36,
@@ -131,6 +134,7 @@ export default function App() {
       fetchUniverse(),
       fetchUserProfiles(),
       fetchFrequencies(),
+      fetchMasterData('app_roles', DEFAULT_ROLE_DEFINITIONS),
     ]).then(([engs, iss, uni, profiles, freq]) => {
       setEngagements(engs);
       setIssues(iss);
@@ -163,6 +167,11 @@ export default function App() {
 
   const handleAddUniverseEntity = (entity: UniverseEntity) => {
     setUniverse((prev) => [entity, ...prev]);
+    upsertUniverseEntity(entity);
+  };
+
+  const handleUpdateUniverseEntity = (entity: UniverseEntity) => {
+    setUniverse((prev) => prev.map((item) => item.id === entity.id ? entity : item));
     upsertUniverseEntity(entity);
   };
 
@@ -648,9 +657,20 @@ export default function App() {
     setEngagements((prev) => [...prev, drafted]);
   };
 
-  const handleSaveFrequencies = (freq: { critical: number; high: number; medium: number; low: number }) => {
+  const handleSaveFrequencies = (freq: AuditFrequencies) => {
     setFrequenciesState(freq);
     saveFrequencies(freq);
+  };
+
+  const handleResetSystemForUAT = async () => {
+    await resetSystemToBaseline();
+    const resetChecklist = DEFAULT_SETUP_ITEMS.map((item) => ({
+      ...item,
+      status: 'To do' as const,
+      note: '',
+    }));
+    await saveMasterData('setup_checklist', resetChecklist);
+    window.location.reload();
   };
 
   // ── Auth gates ────────────────────────────────────────────────────────────
@@ -716,6 +736,7 @@ export default function App() {
         authSession={authSession}
         onLogout={handleLogout}
         onOpenAdminPanel={() => setShowAdminPanel(true)}
+        onResetSystemForUAT={handleResetSystemForUAT}
       />
 
       <main className="w-full max-w-[1220px] mx-auto px-4 sm:px-6 mt-2">
@@ -795,6 +816,7 @@ export default function App() {
                   frequencies={frequencies}
                   isReauditMode={activeLifecycleStage === 7}
                   onAddUniverseEntity={handleAddUniverseEntity}
+                  onUpdateUniverseEntity={handleUpdateUniverseEntity}
                   onDeleteUniverseEntity={handleDeleteUniverseEntity}
                 />
               )}
@@ -858,6 +880,7 @@ export default function App() {
                   frequencies={frequencies}
                   onSaveFrequencies={handleSaveFrequencies}
                   onSaveSizing={handleSaveSizing}
+                  onResetSystemForUAT={handleResetSystemForUAT}
                 />
               )}
 
@@ -875,6 +898,7 @@ export default function App() {
                   onAddUserProfile={handleAddUserProfile}
                   onUpdateUserProfile={handleUpdateUserProfile}
                   onDeleteUserProfile={handleDeleteUserProfile}
+                  onResetSystemForUAT={handleResetSystemForUAT}
                 />
               )}
             </>

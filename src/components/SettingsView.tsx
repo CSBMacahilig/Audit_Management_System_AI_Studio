@@ -8,16 +8,22 @@ import {
   PASSWORD_STRENGTH_COLORS,
 } from '../utils/security';
 import { SizingConfig } from '../data/auditData';
+import { fetchMasterData } from '../utils/db';
+
+const DEFAULT_SIGNATORY_OPTIONS = [
+  'M. Santos – Chief Audit Executive',
+  'Audit-in-charge (from the team)',
+  'R. Dizon – Deputy CAE',
+  'E. Bautista – Chair, Board Audit Committee',
+];
 
 interface SettingsViewProps {
   frequencies: {
-    critical?: number;
     high: number;
     medium: number;
     low: number;
   };
   onSaveFrequencies: (next: {
-    critical: number;
     high: number;
     medium: number;
     low: number;
@@ -131,6 +137,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [defaultCc, setDefaultCc] = useState(
     'President & Chief Executive Officer; Chair, Board Audit Committee'
   );
+  const [signatoryOptions, setSignatoryOptions] = useState(DEFAULT_SIGNATORY_OPTIONS);
+
+  useEffect(() => {
+    fetchMasterData('signatories', DEFAULT_SIGNATORY_OPTIONS).then((options) => {
+      if (options.length > 0) setSignatoryOptions(options);
+    });
+  }, []);
 
   const [docSignatories, setDocSignatories] = useState([
     {
@@ -216,7 +229,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleSaveFrequencies = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveFrequencies({ critical: high, high, medium: med, low });
+    onSaveFrequencies({ high, medium: med, low });
     notify('Audit frequencies saved.');
   };
 
@@ -225,11 +238,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       if (onResetSystemForUAT) {
         await onResetSystemForUAT();
+      } else {
+        throw new Error('The UAT reset action is not available.');
       }
       setShowResetConfirm(false);
       notify('System successfully reset to clean baseline state. Ready for UAT testing.');
-    } catch {
-      notify('System reset completed.');
+    } catch (error) {
+      console.error('UAT reset failed:', error);
+      notify(`System reset failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsResetting(false);
     }
@@ -612,7 +628,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onClick={() => {
               setSizingRows(DEFAULT_SIZING);
               setDefaultSizeByRisk({
-                critical: 'Complex',
                 high: 'Medium',
                 medium: 'Simple',
                 low: 'Simple',
@@ -705,13 +720,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-900"
                     >
-                      <option value="M. Santos – Chief Audit Executive">
-                        M. Santos – Chief Audit Executive
-                      </option>
-                      <option value="Audit-in-charge (from the team)">
-                        Audit-in-charge (from the team)
-                      </option>
-                      <option value="R. Dizon – Deputy CAE">R. Dizon – Deputy CAE</option>
+                      {signatoryOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </td>
                   <td className="py-3.5 pl-4">
@@ -727,12 +738,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-medium text-slate-900"
                     >
                       <option value="— None —">— None —</option>
-                      <option value="M. Santos – Chief Audit Executive">
-                        M. Santos – Chief Audit Executive
-                      </option>
-                      <option value="E. Bautista – Chair, Board Audit Committee">
-                        E. Bautista – Chair, Board Audit Committee
-                      </option>
+                      {signatoryOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
                     </select>
                   </td>
                 </tr>
@@ -1094,8 +1102,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               System Reset for UAT
             </h2>
             <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-              Reset system state to clean baseline standards to initiate or restart User Acceptance Testing (UAT).
-              This action clears temporary working notes, resets checklist tasks to &ldquo;To do&rdquo;, re-seeds standard audit universe entities, restores corporate user accounts (@citysavings.com.ph), and aligns all audit frequencies to High, Medium, and Low standards.
+              Clear audit records and configurable master data to start User Acceptance Testing (UAT) with an empty audit workspace. Login accounts, user profiles, and role definitions are retained; the setup checklist returns to &ldquo;To do&rdquo;.
             </p>
           </div>
           <button
@@ -1131,11 +1138,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="p-3.5 bg-amber-50 rounded border border-amber-200 text-amber-900 text-xs space-y-2">
               <p className="font-semibold">The following actions will be performed:</p>
               <ul className="list-disc list-inside space-y-1 text-[11.5px] text-amber-800">
-                <li>Clear all temporary test records, mock findings, and uploaded test attachments.</li>
-                <li>Reset the entire Setup Checklist back to 0% (&ldquo;To do&rdquo; state).</li>
-                <li>Re-seed the baseline Audit Universe, Annual Plan, and Issues Register.</li>
-                <li>Restore standard corporate users (@citysavings.com.ph) and unlock any locked accounts.</li>
-                <li>Set Audit Frequency defaults to High (12 mo), Medium (24 mo), and Low (36 mo).</li>
+                <li>Delete audit engagements, notes, findings, timeline activities, files, activity logs, issues, universe entries, and sizing settings.</li>
+                <li>Clear configurable master-data values and reset the Setup Checklist to &ldquo;To do&rdquo;.</li>
+                <li>Retain system login accounts, user profiles, and role definitions so access can continue after reset.</li>
+                <li>Clear browser-cached configuration data.</li>
               </ul>
             </div>
 
