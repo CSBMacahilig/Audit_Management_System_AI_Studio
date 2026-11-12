@@ -580,21 +580,47 @@ export default function App() {
   const handleUpdateReport = (
     engagementId: string,
     newStatus: AuditEngagement['reportStatus'],
-    executiveSummary: string
+    executiveSummary: string,
+    reportRating?: string
   ) => {
     setEngagements((prev) =>
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const logEntry = {
           id: `act-${Date.now()}`,
-          timestamp: '4 Oct 2026, 14:32',
+          timestamp: new Date().toLocaleString('en-GB'),
           actor: currentUser?.name ?? '',
-          action: `${eng.reportRef} Report status updated to ${newStatus}`,
+          action: reportRating !== undefined && reportRating !== eng.reportRating && newStatus === eng.reportStatus
+            ? `${eng.reportRef} overall rating updated to ${reportRating}`
+            : `${eng.reportRef} report status updated to ${newStatus}`,
         };
         const updated: AuditEngagement = {
           ...eng,
           reportStatus: newStatus,
           executiveSummary,
+          ...(reportRating !== undefined ? { reportRating } : {}),
+          activityLog: [logEntry, ...eng.activityLog],
+        };
+        upsertEngagement(updated);
+        insertActivityLog(engagementId, logEntry);
+        return updated;
+      })
+    );
+  };
+
+  const handleUpdateEngagementStatus = (engagementId: string, status: string) => {
+    setEngagements((prev) =>
+      prev.map((eng) => {
+        if (eng.id !== engagementId || eng.status === status) return eng;
+        const logEntry = {
+          id: `act-${Date.now()}`,
+          timestamp: new Date().toLocaleString('en-GB'),
+          actor: currentUser?.name ?? '',
+          action: `${eng.ref} audit status changed to ${status}`,
+        };
+        const updated = {
+          ...eng,
+          status,
           activityLog: [logEntry, ...eng.activityLog],
         };
         upsertEngagement(updated);
@@ -831,6 +857,7 @@ export default function App() {
                     upsertEngagement(newEng);
                     setEngagements((prev) => [newEng, ...prev]);
                   }}
+                  onUpdateEngagementStatus={handleUpdateEngagementStatus}
                   onAutoAssignLeads={handleAutoAssignLeads}
                   onDraftFromUniverse={handleDraftFromUniverse}
                 />

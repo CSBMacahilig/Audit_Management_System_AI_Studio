@@ -17,6 +17,7 @@ interface AnnualPlanViewProps {
   userProfiles: UserProfile[];
   onSelectEngagement: (engagement: AuditEngagement) => void;
   onAddEngagement: (newEng: AuditEngagement) => void;
+  onUpdateEngagementStatus: (engagementId: string, status: string) => void;
   onAutoAssignLeads: () => void;
   onDraftFromUniverse: () => void;
 }
@@ -26,6 +27,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   userProfiles,
   onSelectEngagement,
   onAddEngagement,
+  onUpdateEngagementStatus,
   onAutoAssignLeads,
   onDraftFromUniverse,
 }) => {
@@ -40,19 +42,25 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState(DEFAULT_AUDIT_TYPES[0]);
   const [auditTypes, setAuditTypes] = useState(DEFAULT_AUDIT_TYPES);
+  const [auditStatuses, setAuditStatuses] = useState(['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed']);
   const [newEntity, setNewEntity] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
   const [newLead, setNewLead] = useState('A. Villanueva');
   const [newStart, setNewStart] = useState('2026-11-02');
   const [newEnd, setNewEnd] = useState('2026-12-11');
+  const [newStatus, setNewStatus] = useState('Planned');
 
   useEffect(() => {
     fetchMasterData('audit_types', DEFAULT_AUDIT_TYPES).then((types) => {
-      if (types.length > 0) {
-        setAuditTypes(types);
-        setNewCategory((current) => types.includes(current) ? current : types[0]);
-      }
+      if (types.length === 0) return;
+      setAuditTypes(types);
+      setNewCategory((current) => types.includes(current) ? current : types[0]);
+    });
+    fetchMasterData('audit_statuses', ['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed']).then((statuses) => {
+      if (statuses.length === 0) return;
+      setAuditStatuses(statuses);
+      setNewStatus((current) => statuses.includes(current) ? current : statuses[0]);
     });
   }, []);
 
@@ -117,7 +125,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-            Planned
+            {status}
           </span>
         );
     }
@@ -128,19 +136,13 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     0
   );
 
-  const plannedCount = engagements.filter((e) => e.status === "Planned").length;
-  const scheduledCount = engagements.filter((e) => e.status === "Scheduled").length;
-  const inProgressCount = engagements.filter((e) => e.status === "In progress").length;
-  const reportingCount = engagements.filter((e) => e.status === "Reporting").length;
-  const closedCount = engagements.filter((e) => e.status === "Closed").length;
-
+  const availableAuditStatuses = [...new Set([...auditStatuses, ...engagements.map((engagement) => engagement.status)])];
   const statusFilterTabs = [
     { id: "All", label: `All ${engagements.length > 0 ? `(${engagements.length})` : ""}`.trim() },
-    { id: "Planned", label: `Planned ${plannedCount}` },
-    { id: "Scheduled", label: `Scheduled ${scheduledCount}` },
-    { id: "In progress", label: `In progress ${inProgressCount}` },
-    { id: "Reporting", label: `Reporting ${reportingCount}` },
-    { id: "Closed", label: `Closed ${closedCount}` },
+    ...availableAuditStatuses.map((status) => ({
+      id: status,
+      label: `${status} ${engagements.filter((engagement) => engagement.status === status).length}`,
+    })),
   ];
 
   const displayedEngagements = filteredEngagements;
@@ -173,7 +175,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       endDate: newEnd,
       durationDays: 26,
       budgetedHours: 240,
-      status: 'Planned',
+      status: newStatus,
       readyRatio: '0/9 ready',
       lifecycleStage: 1,
       fieldworkPct: 0,
@@ -363,8 +365,18 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     <div className="text-xs text-slate-500 mt-0.5">{eng.durationDays} days</div>
                   </td>
                   <td className="py-3.5 pl-4 align-top">
-                    <div className="flex flex-col items-start gap-1">
+                    <div className="flex flex-col items-start gap-1" onClick={(event) => event.stopPropagation()}>
                       {getStatusBadge(eng.status)}
+                      <select
+                        aria-label={`Audit status for ${eng.ref}`}
+                        value={eng.status}
+                        onChange={(event) => onUpdateEngagementStatus(eng.id, event.target.value)}
+                        className="max-w-40 px-2 py-1 bg-white border border-slate-300 rounded text-[11px] text-slate-700"
+                      >
+                        {[...new Set([...auditStatuses, eng.status])].map((status) => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
                       <span className="inline-block px-2 py-0.5 bg-white border border-slate-300 rounded text-[11px] font-mono-tabular text-slate-600">
                         {eng.readyRatio || '0/9 ready'}
                       </span>
@@ -430,7 +442,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   className="w-full px-3 py-2 border border-slate-300 rounded-md"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     Audit Type
@@ -458,6 +470,20 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                       <option key={u.id} value={u.name}>
                         {u.name}
                       </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Audit Status
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                  >
+                    {auditStatuses.map((status) => (
+                      <option key={status} value={status}>{status}</option>
                     ))}
                   </select>
                 </div>

@@ -18,6 +18,7 @@ import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay, toDateInputValue } from '../utils/date';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
+const DEFAULT_REPORT_RATINGS = ['Satisfactory', 'Needs improvement', 'Unsatisfactory'];
 
 interface FieldworkViewProps {
   engagements: AuditEngagement[];
@@ -55,7 +56,8 @@ interface FieldworkViewProps {
   onUpdateReport?: (
     engagementId: string,
     newStatus: AuditEngagement['reportStatus'],
-    executiveSummary: string
+    executiveSummary: string,
+    reportRating?: string
   ) => void;
   onAdvanceEngagementStage?: (stageId: LifecycleStageId) => void;
 }
@@ -108,6 +110,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   const [fndTitle, setFndTitle] = useState('');
   const [fndSeverity, setFndSeverity] = useState('High');
   const [findingSeverities, setFindingSeverities] = useState(DEFAULT_FINDING_SEVERITIES);
+  const [reportRatings, setReportRatings] = useState(DEFAULT_REPORT_RATINGS);
   const [fndCondition, setFndCondition] = useState('');
   const [fndCriteria, setFndCriteria] = useState('');
   const [fndCause, setFndCause] = useState('');
@@ -123,6 +126,9 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
         setFindingSeverities(severities);
         setFndSeverity((current) => severities.includes(current) ? current : severities[0]);
       }
+    });
+    fetchMasterData('report_ratings', DEFAULT_REPORT_RATINGS).then((ratings) => {
+      if (ratings.length > 0) setReportRatings(ratings);
     });
   }, []);
 
@@ -170,10 +176,6 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
 
   // Report sub-tab state
   const [execSummaryDraft, setExecSummaryDraft] = useState<string>('');
-  const [auditOpinion, setAuditOpinion] = useState<
-    'Satisfactory' | 'Needs Improvement' | 'Unsatisfactory'
-  >('Needs Improvement');
-
   // Audit trail sub-tab state
   const [trailSearch, setTrailSearch] = useState('');
 
@@ -1751,20 +1753,18 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                 <span className="text-slate-600">Overall Rating:</span>
                 <select
                   aria-label="Overall audit opinion"
-                  value={auditOpinion}
-                  onChange={(e) =>
-                    setAuditOpinion(
-                      e.target.value as
-                        | 'Satisfactory'
-                        | 'Needs Improvement'
-                        | 'Unsatisfactory'
-                    )
-                  }
+                  value={eng.reportRating ?? reportRatings[0] ?? ''}
+                  onChange={(e) => onUpdateReport?.(
+                    eng.id,
+                    eng.reportStatus,
+                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500),
+                    e.target.value
+                  )}
                   className="px-2.5 py-1 border border-slate-300 rounded bg-white font-semibold text-slate-900"
                 >
-                  <option value="Satisfactory">Satisfactory</option>
-                  <option value="Needs Improvement">Needs Improvement</option>
-                  <option value="Unsatisfactory">Unsatisfactory</option>
+                  {[...new Set([...reportRatings, ...(eng.reportRating ? [eng.reportRating] : [])])].map((rating) => (
+                    <option key={rating} value={rating}>{rating}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1783,7 +1783,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   onUpdateReport?.(
                     eng.id,
                     'Submitted to Lead',
-                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500)
+                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500),
+                    eng.reportRating ?? reportRatings[0]
                   );
                   notify(`${eng.reportRef} saved and submitted to Engagement Lead.`);
                 }}
@@ -1797,7 +1798,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   onUpdateReport?.(
                     eng.id,
                     'Approved by Lead',
-                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500)
+                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500),
+                    eng.reportRating ?? reportRatings[0]
                   );
                   notify(`${eng.reportRef} approved by Engagement Lead (${eng.lead}).`);
                 }}
@@ -1817,7 +1819,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   onUpdateReport?.(
                     eng.id,
                     'Approved by CAE',
-                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500)
+                    sanitizeMultiline(execSummaryDraft || eng.executiveSummary, 1500),
+                    eng.reportRating ?? reportRatings[0]
                   );
                   notify(
                     `${eng.reportRef} Final Audit Report approved by CAE (${currentUser.name}).`

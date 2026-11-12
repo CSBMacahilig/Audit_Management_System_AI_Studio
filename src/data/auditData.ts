@@ -308,7 +308,7 @@ export const USERS: UserProfile[] = [
 
 export type RiskLevel = 'Critical' | 'High' | 'Medium' | 'Low';
 export type AuditRiskLevel = 'High' | 'Medium' | 'Low';
-export type AuditStatus = 'Closed' | 'Reporting' | 'In progress' | 'Scheduled' | 'Planned';
+export type AuditStatus = string;
 
 export interface WorkingNote {
   id: string;
@@ -398,6 +398,7 @@ export interface AuditEngagement {
   files: AuditFile[];
   activityLog: ActivityLogItem[];
   reportStatus: 'Draft' | 'Submitted to Lead' | 'Approved by Lead' | 'Approved by CAE';
+  reportRating?: string;
   reportRef: string;
   executiveSummary: string;
 }
