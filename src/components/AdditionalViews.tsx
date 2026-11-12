@@ -29,6 +29,7 @@ import {
   AccessListRow,
 } from '../utils/security';
 import { createOrSyncSystemUser } from '../utils/authStore';
+import { formatDateForDisplay, toDateInputValue } from '../utils/date';
 import {
   APP_ROLES,
   AppRole,
@@ -518,16 +519,7 @@ export const AuditUniverseView: React.FC<{
   };
 
   const formatDateDisplay = (dateStr: string): string => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      }
-    } catch {
-      // ignore
-    }
-    return dateStr;
+    return formatDateForDisplay(dateStr) || '—';
   };
 
   const computeNextDueDate = (dateStr: string, months: number): string => {
@@ -553,9 +545,9 @@ export const AuditUniverseView: React.FC<{
     setEditLikelihood(rec.likelihood);
     setEditImpact(rec.impact);
     setEditRiskScore(rec.riskScore);
-    setEditLastAudit(rec.lastAudit);
+    setEditLastAudit(toDateInputValue(rec.lastAudit));
     setEditCycleMonths(rec.cycleMonths);
-    setEditNextDue(rec.nextDue);
+    setEditNextDue(toDateInputValue(rec.nextDue));
     setEditNextDueStatus(rec.nextDueStatus);
   };
 
@@ -629,7 +621,9 @@ export const AuditUniverseView: React.FC<{
     const riskLevel: AuditRiskLevel = calculateRiskLevel(score);
     const cycleMonths = editCycleMonths || getCycleMonths(riskLevel);
     const formattedLastAudit = formatDateDisplay(editLastAudit);
-    const nextDue = editNextDue.trim() ? editNextDue.trim() : computeNextDueDate(editLastAudit, cycleMonths);
+    const nextDue = editNextDue.trim()
+      ? formatDateDisplay(editNextDue)
+      : computeNextDueDate(editLastAudit, cycleMonths);
 
     const updated: UniverseRecord = {
       ...editingRecord,
@@ -1232,10 +1226,10 @@ export const AuditUniverseView: React.FC<{
                     Last Audit Date
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
                     value={editLastAudit}
                     onChange={(e) => setEditLastAudit(e.target.value)}
-                    placeholder="e.g. 4 Oct 2026 or 2026-10-04"
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
                   />
                 </div>
@@ -1261,10 +1255,9 @@ export const AuditUniverseView: React.FC<{
                     Next Due Date
                   </label>
                   <input
-                    type="text"
+                    type="date"
                     value={editNextDue}
                     onChange={(e) => setEditNextDue(e.target.value)}
-                    placeholder="e.g. 4 Apr 2027"
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
                   />
                 </div>
@@ -1482,7 +1475,7 @@ export const IssuesView: React.FC<{
     activeLifecycleStage === 6 ? 'For validation' : 'Open'
   );
   const [selectedIssue, setSelectedIssue] = useState<IssueRegisterItem | null>(null);
-  const [extensionDate, setExtensionDate] = useState('30 Nov 2026');
+  const [extensionDate, setExtensionDate] = useState('2026-11-30');
   const [closureRemarks, setClosureRemarks] = useState('');
 
   const openIssues = issues.filter((i) => i.status !== 'Closed');
@@ -1522,10 +1515,10 @@ export const IssuesView: React.FC<{
   const handleGrantExtension = (issue: IssueRegisterItem) => {
     const updated: IssueRegisterItem = {
       ...issue,
-      currentDue: extensionDate,
+      currentDue: formatDateForDisplay(extensionDate),
       extensionCount: issue.extensionCount + 1,
       isOverdue: false,
-      daysStatus: `Extended to ${extensionDate}`,
+      daysStatus: `Extended to ${formatDateForDisplay(extensionDate)}`,
       status: 'In progress',
     };
     setIssues((prev) =>
@@ -1728,7 +1721,10 @@ export const IssuesView: React.FC<{
                   <td className="py-3.5 pl-4 align-top text-right">
                     <button
                       type="button"
-                      onClick={() => setSelectedIssue(iss)}
+                      onClick={() => {
+                        setSelectedIssue(iss);
+                        setExtensionDate(toDateInputValue(iss.currentDue));
+                      }}
                       className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-semibold cursor-pointer"
                     >
                       Manage
@@ -1794,15 +1790,17 @@ export const IssuesView: React.FC<{
                     </label>
                     <div className="flex gap-2">
                       <input
-                        type="text"
+                        type="date"
+                        required
                         value={extensionDate}
                         onChange={(e) => setExtensionDate(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded"
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white"
                       />
                       <button
                         type="button"
+                        disabled={!extensionDate}
                         onClick={() => handleGrantExtension(selectedIssue)}
-                        className="px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer shrink-0"
+                        className="px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Extend
                       </button>

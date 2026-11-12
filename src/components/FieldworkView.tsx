@@ -15,6 +15,7 @@ import {
   validateFileUpload,
 } from '../utils/security';
 import { fetchMasterData } from '../utils/db';
+import { formatDateForDisplay, toDateInputValue } from '../utils/date';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 
@@ -113,7 +114,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   const [fndEffect, setFndEffect] = useState('');
   const [fndRecommendation, setFndRecommendation] = useState('');
   const [fndOwner, setFndOwner] = useState('E. Navarro (IT)');
-  const [fndTargetDate, setFndTargetDate] = useState('30 Nov 2026');
+  const [fndTargetDate, setFndTargetDate] = useState('2026-11-30');
   const [fndLinkedNote, setFndLinkedNote] = useState('WN-002');
 
   useEffect(() => {
@@ -544,7 +545,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
         sanitizeMultiline(fndRecommendation, 800) ||
         'Implement automated validation control and perform retrospective review.',
       owner: sanitizeText(fndOwner, 100) || 'E. Navarro (IT)',
-      targetDate: sanitizeText(fndTargetDate, 40) || '30 Nov 2026',
+      targetDate: formatDateForDisplay(sanitizeText(fndTargetDate, 40)) || '30 Nov 2026',
       status: 'Open',
       linkedNoteRef: sanitizeText(fndLinkedNote, 20) || 'WN-001',
     };
@@ -1185,7 +1186,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                       onClick={() => {
                         setEditingFindingPlan(fnd);
                         setPlanOwnerInput(fnd.owner);
-                        setPlanDateInput(fnd.targetDate);
+                        setPlanDateInput(toDateInputValue(fnd.targetDate));
                         setPlanResponseInput(fnd.recommendation);
                         onSelectSubTab('auditee');
                       }}
@@ -1371,7 +1372,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                           onClick={() => {
                             setEditingFindingPlan(f);
                             setPlanOwnerInput(f.owner);
-                            setPlanDateInput(f.targetDate);
+                            setPlanDateInput(toDateInputValue(f.targetDate));
                             setPlanResponseInput(f.recommendation);
                           }}
                           className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 rounded font-semibold text-slate-800 cursor-pointer"
@@ -1407,7 +1408,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                       Target Completion Date
                     </label>
                     <input
-                      type="text"
+                      type="date"
+                      required
                       value={planDateInput}
                       onChange={(e) => setPlanDateInput(e.target.value)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded"
@@ -1420,18 +1422,19 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                     <div className="flex gap-2">
                       <button
                         type="button"
+                        disabled={!planDateInput}
                         onClick={() => {
                           onUpdateFindingStatus?.(
                             eng.id,
                             editingFindingPlan.id,
                             'Action plan submitted',
                             sanitizeText(planOwnerInput, 80),
-                            sanitizeText(planDateInput, 40)
+                            formatDateForDisplay(sanitizeText(planDateInput, 40))
                           );
                           setEditingFindingPlan(null);
                           notify(`Management action plan committed for ${editingFindingPlan.ref}.`);
                         }}
-                        className="px-3.5 py-1.5 bg-[#542D84] text-white font-semibold rounded cursor-pointer"
+                        className="px-3.5 py-1.5 bg-[#542D84] text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Save &amp; commit plan
                       </button>
@@ -2186,10 +2189,11 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                     Target Remediation Date
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
                     value={fndTargetDate}
                     onChange={(e) => setFndTargetDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md"
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md bg-white"
                   />
                 </div>
               </div>

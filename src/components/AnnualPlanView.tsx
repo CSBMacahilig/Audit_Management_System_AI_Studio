@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
+import { formatDateForDisplay } from '../utils/date';
 
 const DEFAULT_AUDIT_TYPES = [
   'Financial audit',
@@ -43,8 +44,8 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
   const [newLead, setNewLead] = useState('A. Villanueva');
-  const [newStart, setNewStart] = useState('2 Nov');
-  const [newEnd, setNewEnd] = useState('11 Dec 2026');
+  const [newStart, setNewStart] = useState('2026-11-02');
+  const [newEnd, setNewEnd] = useState('2026-12-11');
 
   useEffect(() => {
     fetchMasterData('audit_types', DEFAULT_AUDIT_TYPES).then((types) => {
@@ -358,7 +359,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     {eng.lead || '—'}
                   </td>
                   <td className="py-3.5 px-4 align-top tabular-nums">
-                    <div className="text-slate-900 font-medium">{eng.startDate} – {eng.endDate}</div>
+                    <div className="text-slate-900 font-medium">{formatDateForDisplay(eng.startDate)} – {formatDateForDisplay(eng.endDate)}</div>
                     <div className="text-xs text-slate-500 mt-0.5">{eng.durationDays} days</div>
                   </td>
                   <td className="py-3.5 pl-4 align-top">
@@ -508,10 +509,12 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     Start Date
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
+                    max={newEnd || undefined}
                     value={newStart}
                     onChange={(e) => setNewStart(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   />
                 </div>
                 <div>
@@ -519,10 +522,12 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     End Date
                   </label>
                   <input
-                    type="text"
+                    type="date"
+                    required
+                    min={newStart || undefined}
                     value={newEnd}
                     onChange={(e) => setNewEnd(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   />
                 </div>
               </div>
