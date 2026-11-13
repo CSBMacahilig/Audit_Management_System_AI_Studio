@@ -96,12 +96,14 @@ export default function App() {
   }, []);
 
   const handleLoginSuccess = (session: AuthSession) => {
+    if (session.role !== 'admin') setAccessActive(true);
     setAuthSession(session);
   };
 
   const handleLogout = () => {
     logout();
     setAuthSession(null);
+    setAccessActive(true);
     setShowAdminPanel(false);
   };
 
@@ -755,8 +757,11 @@ export default function App() {
         currentUser={currentUser ?? FALLBACK_USER}
         onChangeUser={setCurrentUser}
         userProfiles={userProfiles}
+        canSimulateAccess={authSession.role === 'admin'}
         accessActive={accessActive}
-        onToggleAccess={() => setAccessActive((prev) => !prev)}
+        onToggleAccess={() => {
+          if (authSession.role === 'admin') setAccessActive((prev) => !prev);
+        }}
         selectedEngagement={activeTab === 'fieldwork' ? selectedEngagement : null}
         onAdvanceEngagementStage={handleAdvanceEngagementStage}
         authSession={authSession}
@@ -795,13 +800,13 @@ export default function App() {
                 reason={tabCheck.reason}
                 requiredRole={tabCheck.requiredRole}
                 onGoToOverview={() => handleSelectTab('overview')}
-                onSwitchRole={() => {
+                onSwitchRole={authSession.role === 'admin' ? () => {
                   const profiles = userProfiles.length > 0 ? userProfiles : [FALLBACK_USER];
                   const currentIdx = profiles.findIndex((u) => u.id === currentUser?.id);
                   const nextUser = profiles[(currentIdx + 1) % profiles.length];
                   if (nextUser) setCurrentUser(nextUser);
-                }}
-                onBypassSimulation={() => setAccessActive(false)}
+                } : undefined}
+                onBypassSimulation={authSession.role === 'admin' ? () => setAccessActive(false) : undefined}
               />
             );
           }
@@ -879,6 +884,7 @@ export default function App() {
                   onSelectSubTab={handleSelectSubTab}
                   currentUser={currentUser ?? FALLBACK_USER}
                   onChangeUser={setCurrentUser}
+                  canSimulateRole={authSession.role === 'admin'}
                   userProfiles={userProfiles}
                   accessActive={accessActive}
                   onApproveWorkingNote={handleApproveWorkingNote}
@@ -919,8 +925,11 @@ export default function App() {
                   currentUser={currentUser ?? FALLBACK_USER}
                   onChangeUser={setCurrentUser}
                   userProfiles={userProfiles}
+                  canSimulateAccess={authSession.role === 'admin'}
                   accessActive={accessActive}
-                  onToggleAccess={() => setAccessActive((prev) => !prev)}
+                  onToggleAccess={() => {
+                    if (authSession.role === 'admin') setAccessActive((prev) => !prev);
+                  }}
                   onSelectTab={handleSelectTab}
                   onAddUserProfile={handleAddUserProfile}
                   onUpdateUserProfile={handleUpdateUserProfile}

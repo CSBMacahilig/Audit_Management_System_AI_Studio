@@ -2607,6 +2607,7 @@ export const MasterDataSetupAccessView: React.FC<{
   currentUser: UserProfile;
   onChangeUser: (u: UserProfile) => void;
   userProfiles: UserProfile[];
+  canSimulateAccess: boolean;
   accessActive?: boolean;
   onToggleAccess?: () => void;
   onSelectTab?: (tab: MainTabId) => void;
@@ -2619,6 +2620,7 @@ export const MasterDataSetupAccessView: React.FC<{
   currentUser,
   onChangeUser,
   userProfiles,
+  canSimulateAccess,
   accessActive,
   onToggleAccess,
   onSelectTab,
@@ -4436,7 +4438,7 @@ export const MasterDataSetupAccessView: React.FC<{
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <select
+          {canSimulateAccess && <select
             aria-label="Select simulated user"
             value={currentUser.id}
             onChange={(e) => { const found = userProfiles.find((u) => u.id === e.target.value); if (found) onChangeUser(found); }}
@@ -4445,11 +4447,11 @@ export const MasterDataSetupAccessView: React.FC<{
             {userProfiles.map((u) => (
               <option key={u.id} value={u.id}>{u.name} — {u.headerSubtitle}</option>
             ))}
-          </select>
-          <button type="button" onClick={onToggleAccess}
+          </select>}
+          {canSimulateAccess && <button type="button" onClick={onToggleAccess}
             className="px-3.5 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap">
             {accessActive ? 'Switch to simulated mode' : 'Activate access control'}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -4904,11 +4906,11 @@ export const MasterDataSetupAccessView: React.FC<{
                           className="px-2 py-1 bg-[#492785] hover:bg-[#3b1f6b] text-white rounded text-[10px] font-semibold cursor-pointer whitespace-nowrap">
                           {accessActive && !isSystemAdmin ? 'View access' : 'Edit access'}
                         </button>
-                        <button type="button"
+                        {canSimulateAccess && <button type="button"
                           onClick={() => { const found = userProfiles.find((u: UserProfile) => u.name === usr.name); if (found) { onChangeUser(found); } else { const roleName = usr.roles[0]; const accessRole = normalizeRole(roleName); onChangeUser({ id: usr.id, name: usr.name, roleTitle: usr.roles.join(', '), fullLabel: `${usr.name} — ${usr.roles.join(', ')}`, headerSubtitle: roleName, department: usr.title, canApproveHead: accessRole === 'Chief Audit Executive' || accessRole === 'System administrator', canApproveIndependent: accessRole === 'Audit Division Head' || accessRole === 'Audit Supervisor' || accessRole === 'Independent Reviewer', canApproveCAE: accessRole === 'Chief Audit Executive' }); } }}
                           className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-[10px] font-medium cursor-pointer">
                           Impersonate
-                        </button>
+                        </button>}
                         {(!accessActive || isSystemAdmin) && (
                           <>
                             <button type="button"

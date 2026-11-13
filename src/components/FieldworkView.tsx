@@ -28,6 +28,7 @@ interface FieldworkViewProps {
   onSelectSubTab: (subTab: EngagementSubTabId) => void;
   currentUser: UserProfile;
   onChangeUser: (user: UserProfile) => void;
+  canSimulateRole: boolean;
   userProfiles: UserProfile[];
   accessActive?: boolean;
   onApproveWorkingNote: (
@@ -80,6 +81,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   onSelectSubTab,
   currentUser,
   onChangeUser,
+  canSimulateRole,
   userProfiles,
   accessActive = false,
   onApproveWorkingNote,
@@ -240,6 +242,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
       <div className="space-y-4">
         {/* Working As Card */}
         <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {canSimulateRole ? (
           <div className="flex-1 max-w-md">
             <label
               htmlFor="working-as-select"
@@ -263,10 +266,15 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
               ))}
             </select>
           </div>
-
+          ) : (
+            <div className="text-xs text-slate-600">
+              Working as <strong className="text-slate-900">{currentUser.name}</strong>
+            </div>
+          )}
           <p className="text-xs text-slate-600 md:max-w-md leading-relaxed">
-            Your name is recorded on every save, review and upload in the audit trail, and
-            decides which review buttons you can use. It&apos;s remembered on this device.
+            {canSimulateRole
+              ? "Testing only: switch the simulated user to preview role-specific views and actions."
+              : "Your authenticated profile is recorded on saves, reviews, and uploads."}
           </p>
         </div>
 

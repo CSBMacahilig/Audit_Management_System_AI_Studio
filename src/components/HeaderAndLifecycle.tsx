@@ -19,6 +19,7 @@ interface HeaderAndLifecycleProps {
   currentUser: UserProfile;
   onChangeUser: (user: UserProfile) => void;
   userProfiles: UserProfile[];
+  canSimulateAccess: boolean;
   accessActive: boolean;
   onToggleAccess: () => void;
   selectedEngagement: AuditEngagement | null;
@@ -51,6 +52,7 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   currentUser,
   onChangeUser,
   userProfiles,
+  canSimulateAccess,
   accessActive,
   onToggleAccess,
   authSession,
@@ -195,54 +197,58 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onToggleAccess}
-              className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
-            >
-              {accessActive ? 'Simulate access' : 'Activate access'}
-            </button>
+            {canSimulateAccess && (
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleAccess}
+                  className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  {accessActive ? 'Simulate access' : 'Activate access'}
+                </button>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowUserMenu((prev) => !prev)}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
-              >
-                Switch audit role
-              </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowUserMenu((prev) => !prev)}
+                    className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Switch audit role
+                  </button>
 
-              {showUserMenu && (
-                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-slate-200 py-1.5 z-50">
-                  <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                    Select Active Audit Role
-                  </div>
-                  {userProfiles.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => {
-                        onChangeUser(u);
-                        setShowUserMenu(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50/70 transition-colors cursor-pointer ${
-                        u.id === currentUser.id
-                          ? 'bg-purple-50/90 font-semibold text-[#542D84]'
-                          : 'text-slate-700'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-semibold text-slate-900">{u.name}</div>
-                        <div className="text-[11px] text-slate-500">{u.roleTitle}</div>
+                  {showUserMenu && (
+                    <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-slate-200 py-1.5 z-50">
+                      <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                        Select Active Audit Role
                       </div>
-                      {u.id === currentUser.id && (
-                        <Check className="w-3.5 h-3.5 text-[#542D84] shrink-0" />
-                      )}
-                    </button>
-                  ))}
+                      {userProfiles.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            onChangeUser(u);
+                            setShowUserMenu(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-purple-50/70 transition-colors cursor-pointer ${
+                            u.id === currentUser.id
+                              ? 'bg-purple-50/90 font-semibold text-[#542D84]'
+                              : 'text-slate-700'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-semibold text-slate-900">{u.name}</div>
+                            <div className="text-[11px] text-slate-500">{u.roleTitle}</div>
+                          </div>
+                          {u.id === currentUser.id && (
+                            <Check className="w-3.5 h-3.5 text-[#542D84] shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>
