@@ -42,7 +42,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState(DEFAULT_AUDIT_TYPES[0]);
   const [auditTypes, setAuditTypes] = useState(DEFAULT_AUDIT_TYPES);
-  const [auditStatuses, setAuditStatuses] = useState(['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed']);
+  const [auditStatuses, setAuditStatuses] = useState(['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed', 'Deferred', 'Cancelled']);
   const [newEntity, setNewEntity] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
@@ -57,7 +57,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       setAuditTypes(types);
       setNewCategory((current) => types.includes(current) ? current : types[0]);
     });
-    fetchMasterData('audit_statuses', ['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed']).then((statuses) => {
+    fetchMasterData('audit_statuses', ['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed', 'Deferred', 'Cancelled']).then((statuses) => {
       if (statuses.length === 0) return;
       setAuditStatuses(statuses);
       setNewStatus((current) => statuses.includes(current) ? current : statuses[0]);
@@ -152,7 +152,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     if (!newTitle.trim() || !newEntity.trim()) return;
     const score = newLikelihood * newImpact;
     const riskLevel: AuditRiskLevel =
-      score >= 15 ? 'High' : score >= 8 ? 'Medium' : 'Low';
+      score >= 7 ? 'High' : score >= 4 ? 'Medium' : 'Low';
     const nextNum = engagements.length + 1;
     const ref = `AUD-${selectedYear}-0${nextNum < 10 ? '0' + nextNum : nextNum}`;
 

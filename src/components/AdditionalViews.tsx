@@ -48,8 +48,8 @@ export const OverviewView: React.FC<{
   onSelectTab: (tab: MainTabId) => void;
 }> = ({ onOpenEngagement, onSelectTab, onSelectLifecycleStage, engagements, universe = [], issues = [] }) => {
   const getRiskLevel = (score: number): AuditRiskLevel => {
-    if (score >= 15) return 'High';
-    if (score >= 8) return 'Medium';
+    if (score >= 7) return 'High';
+    if (score >= 4) return 'Medium';
     return 'Low';
   };
 
@@ -507,8 +507,8 @@ export const AuditUniverseView: React.FC<{
   const [editNextDueStatus, setEditNextDueStatus] = useState<'Overdue' | 'Due soon' | 'On track'>('On track');
 
   const calculateRiskLevel = (score: number): AuditRiskLevel => {
-    if (score >= 15) return 'High';
-    if (score >= 8) return 'Medium';
+    if (score >= 7) return 'High';
+    if (score >= 4) return 'Medium';
     return 'Low';
   };
 
@@ -1009,8 +1009,8 @@ export const AuditUniverseView: React.FC<{
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    min={1}
-                    max={50}
+                      min={1}
+                      max={10}
                     value={newRiskScore}
                     onChange={(e) => {
                       setNewRiskScore(Number(e.target.value));
@@ -1204,7 +1204,7 @@ export const AuditUniverseView: React.FC<{
                   <input
                     type="number"
                     min={1}
-                    max={50}
+                    max={10}
                     value={editRiskScore}
                     onChange={(e) => setEditRiskScore(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-900"
@@ -1900,14 +1900,14 @@ const DEFAULT_CONFIGURABLE_LISTS = {
   departments: DEFAULT_DEPARTMENTS,
   audit_types: ['Financial audit', 'Operational audit', 'Compliance audit', 'IT audit', 'Thematic audit'],
   finding_severities: ['Critical', 'High', 'Medium', 'Low'],
-  report_ratings: ['Satisfactory', 'Needs improvement', 'Unsatisfactory'],
+  report_ratings: ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'],
   signatories: [
     'M. Santos – Chief Audit Executive',
     'Audit-in-charge (from the team)',
     'R. Dizon – Deputy CAE',
     'E. Bautista – Chair, Board Audit Committee',
   ],
-  audit_statuses: ['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed'],
+  audit_statuses: ['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed', 'Deferred', 'Cancelled'],
 };
 
 type ConfigurableListKey = keyof typeof DEFAULT_CONFIGURABLE_LISTS;

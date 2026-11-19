@@ -518,7 +518,7 @@ export interface AuditFrequencies { high: number; medium: number; low: number; }
 
 export async function fetchFrequencies(): Promise<AuditFrequencies> {
   const { data, error } = await supabase.from('audit_frequencies').select('*').eq('id', 'global').single();
-  if (error || !data) return { high: 12, medium: 24, low: 36 };
+  if (error || !data) return { high: 12, medium: 36, low: 48 };
   return { high: data.high, medium: data.medium, low: data.low };
 }
 

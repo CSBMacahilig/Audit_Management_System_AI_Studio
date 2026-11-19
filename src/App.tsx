@@ -59,6 +59,7 @@ import {
   AuditFrequencies,
 } from './utils/db';
 import { SizingConfig } from './data/auditData';
+import { canTransitionEngagementStatus, EngagementStatus } from './utils/brw';
 
 // Fallback profile used when user_profiles table is empty (fresh database)
 const FALLBACK_USER: UserProfile = {
@@ -122,8 +123,8 @@ export default function App() {
 
   const [frequencies, setFrequenciesState] = useState<AuditFrequencies>({
     high: 12,
-    medium: 24,
-    low: 36,
+    medium: 36,
+    low: 48,
   });
 
   // Load all data from Supabase once authenticated
@@ -614,6 +615,13 @@ export default function App() {
     setEngagements((prev) =>
       prev.map((eng) => {
         if (eng.id !== engagementId || eng.status === status) return eng;
+        if (!canTransitionEngagementStatus(
+          eng.status as EngagementStatus,
+          status as EngagementStatus
+        )) {
+          console.warn(`Invalid engagement status transition: ${eng.status} -> ${status}`);
+          return eng;
+        }
         const logEntry = {
           id: `act-${Date.now()}`,
           timestamp: new Date().toLocaleString('en-GB'),

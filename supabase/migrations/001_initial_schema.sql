@@ -66,7 +66,7 @@ create table if not exists public.engagements (
   end_date              text not null,
   duration_days         int not null,
   budgeted_hours        int not null,
-  status                text not null check (status in ('Closed','Reporting','In progress','Scheduled','Planned')),
+  status                text not null check (status in ('Closed','Reporting','In progress','Scheduled','Planned','Deferred','Cancelled')),
   ready_ratio           text not null,
   lifecycle_stage       int not null check (lifecycle_stage between 1 and 7),
   fieldwork_pct         int not null default 0,
@@ -211,10 +211,9 @@ create table if not exists public.sizing_configs (
 -- ── 12. AUDIT FREQUENCIES ────────────────────────────────────
 create table if not exists public.audit_frequencies (
   id        text primary key default 'global',
-  critical  int not null default 6,
   high      int not null default 12,
-  medium    int not null default 24,
-  low       int not null default 36,
+  medium    int not null default 36,
+  low       int not null default 48,
   updated_at timestamptz not null default now()
 );
 
@@ -245,4 +244,3 @@ create policy "allow_all_issues"           on public.issues_register  for all us
 create policy "allow_all_universe"         on public.universe_entities for all using (true) with check (true);
 create policy "allow_all_sizing"           on public.sizing_configs   for all using (true) with check (true);
 create policy "allow_all_frequencies"      on public.audit_frequencies for all using (true) with check (true);
-

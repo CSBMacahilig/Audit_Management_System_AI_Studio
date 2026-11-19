@@ -318,7 +318,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Risk rating scale
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Inherent risk score = likelihood (1–5) × impact (1–5) or auditor defined.
+            Composite weighted risk score is a 1.00–10.00 scale; legacy matrix inputs remain supported.
           </p>
 
           <div className="mt-5 overflow-x-auto">
@@ -335,21 +335,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 {[
                   {
                     rating: 'High',
-                    score: '15–25',
+                    score: '7.00–10.00',
                     color: 'bg-[#D97724]',
                     cycle: `${high} months`,
                     fw: '5 weeks',
                   },
                   {
                     rating: 'Medium',
-                    score: '8–14',
+                    score: '4.00–below 7.00',
                     color: 'bg-[#C99E2C]',
                     cycle: `${med} months`,
                     fw: '4 weeks',
                   },
                   {
                     rating: 'Low',
-                    score: '1–7',
+                    score: 'Below 4.00',
                     color: 'bg-[#519E66]',
                     cycle: `${low} months`,
                     fw: '3 weeks',

@@ -18,7 +18,7 @@ import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay, toDateInputValue } from '../utils/date';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
-const DEFAULT_REPORT_RATINGS = ['Satisfactory', 'Needs improvement', 'Unsatisfactory'];
+const DEFAULT_REPORT_RATINGS = ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'];
 
 interface FieldworkViewProps {
   engagements: AuditEngagement[];
