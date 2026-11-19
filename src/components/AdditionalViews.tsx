@@ -929,8 +929,8 @@ export const AuditUniverseView: React.FC<{
                     onChange={(e) => setNewOwner(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   >
-                    {dynamicOwners.map((owner) => (
-                      <option key={owner.head + ' - ' + owner.unit} value={`${owner.head} (${owner.unit})`}>
+                    {dynamicOwners.map((owner, idx) => (
+                      <option key={owner.id || `${owner.head}-${owner.unit}-${idx}`} value={`${owner.head} (${owner.unit})`}>
                         {owner.head} — {owner.unit}
                       </option>
                     ))}
@@ -1138,8 +1138,8 @@ export const AuditUniverseView: React.FC<{
                     onChange={(e) => setEditOwner(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   >
-                    {dynamicOwners.map((owner) => (
-                      <option key={owner.head + ' - ' + owner.unit} value={`${owner.head} (${owner.unit})`}>
+                    {dynamicOwners.map((owner, idx) => (
+                      <option key={owner.id || `${owner.head}-${owner.unit}-${idx}`} value={`${owner.head} (${owner.unit})`}>
                         {owner.head} — {owner.unit}
                       </option>
                     ))}
@@ -1857,6 +1857,7 @@ export interface AuditorRecord {
 }
 
 export interface AuditeeUnitRecord {
+  id?: string;
   unit: string;
   head: string;
   title: string;
@@ -2663,6 +2664,7 @@ export const MasterDataSetupAccessView: React.FC<{
 
   // ── Modal State for Auditee Directory ──────────────────────────────────────
   const [showAuditeeModal, setShowAuditeeModal] = useState(false);
+  const [editingAuditeeIndex, setEditingAuditeeIndex] = useState<number | null>(null);
   const [editingAuditeeUnit, setEditingAuditeeUnit] = useState<string | null>(null);
   const [auditeeFormUnit, setAuditeeFormUnit] = useState('');
   const [auditeeFormHead, setAuditeeFormHead] = useState('');
@@ -3105,6 +3107,7 @@ export const MasterDataSetupAccessView: React.FC<{
 
   // ── Handlers: Auditee Directory ────────────────────────────────────────────
   const handleOpenAddAuditee = () => {
+    setEditingAuditeeIndex(null);
     setEditingAuditeeUnit(null);
     setAuditeeFormUnit('');
     setAuditeeFormHead('');
@@ -3115,7 +3118,8 @@ export const MasterDataSetupAccessView: React.FC<{
     setShowAuditeeModal(true);
   };
 
-  const handleOpenEditAuditee = (dir: AuditeeUnitRecord) => {
+  const handleOpenEditAuditee = (dir: AuditeeUnitRecord, idx: number) => {
+    setEditingAuditeeIndex(idx);
     setEditingAuditeeUnit(dir.unit);
     setAuditeeFormUnit(dir.unit);
     setAuditeeFormHead(dir.head);
@@ -3129,7 +3133,12 @@ export const MasterDataSetupAccessView: React.FC<{
   const handleSaveAuditee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!auditeeFormUnit.trim() || !auditeeFormHead.trim()) return;
+    const existing =
+      editingAuditeeIndex !== null ? auditeeDirectory[editingAuditeeIndex] : undefined;
     const item: AuditeeUnitRecord = {
+      id:
+        existing?.id ||
+        `auditee-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       unit: auditeeFormUnit.trim(),
       head: auditeeFormHead.trim(),
       title: auditeeFormTitle.trim() || 'Unit Head',
@@ -3139,8 +3148,10 @@ export const MasterDataSetupAccessView: React.FC<{
     };
 
     let updated: AuditeeUnitRecord[];
-    if (editingAuditeeUnit) {
-      updated = auditeeDirectory.map((d) => (d.unit === editingAuditeeUnit ? item : d));
+    if (editingAuditeeIndex !== null) {
+      updated = auditeeDirectory.map((d, idx) =>
+        idx === editingAuditeeIndex ? item : d
+      );
     } else {
       updated = [...auditeeDirectory, item];
     }
@@ -3160,18 +3171,20 @@ export const MasterDataSetupAccessView: React.FC<{
       setConfigurableLists((prev) => ({ ...prev, departments }));
       saveMasterData('departments', departments);
     }
+    setEditingAuditeeIndex(null);
+    setEditingAuditeeUnit(null);
     setShowAuditeeModal(false);
   };
 
-  const handleRemoveAuditee = (unit: string) => {
-    const updated = auditeeDirectory.filter((d) => d.unit !== unit);
+  const handleRemoveAuditee = (idx: number) => {
+    const updated = auditeeDirectory.filter((_, i) => i !== idx);
     setAuditeeDirectory(updated);
     saveMasterData('auditee_directory', updated);
   };
 
-  const handleToggleAuditeeStatus = (unit: string) => {
-    const updated = auditeeDirectory.map((dir) =>
-      dir.unit === unit ? { ...dir, isActive: !(dir.isActive ?? true) } : dir
+  const handleToggleAuditeeStatus = (idx: number) => {
+    const updated = auditeeDirectory.map((dir, i) =>
+      i === idx ? { ...dir, isActive: !(dir.isActive ?? true) } : dir
     );
     setAuditeeDirectory(updated);
     saveMasterData('auditee_directory', updated);
@@ -3687,8 +3700,8 @@ export const MasterDataSetupAccessView: React.FC<{
               <h2 className="text-[16px] font-bold text-slate-900">{label}</h2>
               <p className="text-xs text-slate-500 mt-1 min-h-8">{description}</p>
               <ul className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
-                {configurableLists[key].map((value) => (
-                  <li key={value} className="flex items-center justify-between gap-2 text-xs text-slate-800 border-b border-slate-100 py-1.5">
+                {configurableLists[key].map((value, idx) => (
+                  <li key={`${value}-${idx}`} className="flex items-center justify-between gap-2 text-xs text-slate-800 border-b border-slate-100 py-1.5">
                     <span>{value}</span>
                     <button
                       type="button"
@@ -3808,8 +3821,8 @@ export const MasterDataSetupAccessView: React.FC<{
                       aud.skills.toLowerCase().includes(q)
                     );
                   })
-                  .map((aud) => (
-                  <tr key={aud.email} className="hover:bg-slate-50/50 transition-colors">
+                  .map((aud, idx) => (
+                  <tr key={`${aud.email}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 pr-4 font-bold text-slate-900">{aud.name}</td>
                     <td className="py-3 px-4 text-slate-700">{aud.role}</td>
                     <td className="py-3 px-4 text-xs font-mono text-slate-600">{aud.email}</td>
@@ -3889,8 +3902,8 @@ export const MasterDataSetupAccessView: React.FC<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/80">
-                {auditeeDirectory.map((dir) => (
-                  <tr key={dir.unit} className="hover:bg-slate-50/50 transition-colors">
+                {auditeeDirectory.map((dir, idx) => (
+                  <tr key={dir.id || `${dir.unit}-${dir.head}-${dir.email}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
                     <td className="py-3 pr-4 font-bold text-slate-900">
                       {dir.unit}
                     </td>
@@ -3911,21 +3924,21 @@ export const MasterDataSetupAccessView: React.FC<{
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => handleToggleAuditeeStatus(dir.unit)}
+                          onClick={() => handleToggleAuditeeStatus(idx)}
                           className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                         >
                           {dir.isActive === false ? 'Activate' : 'Deactivate'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleOpenEditAuditee(dir)}
+                          onClick={() => handleOpenEditAuditee(dir, idx)}
                           className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleRemoveAuditee(dir.unit)}
+                          onClick={() => handleRemoveAuditee(idx)}
                           className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium cursor-pointer"
                         >
                           Remove
