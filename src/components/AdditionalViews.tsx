@@ -5341,9 +5341,26 @@ export const MasterDataSetupAccessView: React.FC<{
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-[16px] font-bold text-slate-900">Role permission matrix</h2>
-              <span className="text-[10px] font-bold bg-[#E4DDF8] text-[#492785] px-2 py-0.5 rounded-full">
-                {isEditingMatrix ? 'Editing Mode' : 'Configured & Active'}
-              </span>
+              {isEditingMatrix ? (
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                  Editing Mode
+                </span>
+              ) : (
+                <div className="flex items-center gap-2 text-[10px] font-semibold text-emerald-800">
+                  {['Configured', 'Active'].map((status) => (
+                    <label key={status} className="inline-flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked
+                        readOnly
+                        aria-label={status}
+                        className="h-3.5 w-3.5 accent-emerald-700"
+                      />
+                      {status}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Maintain the role-to-capability matrix across the 6-stage audit lifecycle. Application access follows each role’s selected access template.
