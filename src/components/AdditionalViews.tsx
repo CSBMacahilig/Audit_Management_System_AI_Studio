@@ -2635,6 +2635,7 @@ export const MasterDataSetupAccessView: React.FC<{
   onUpdateUserProfile?: (user: UserProfile) => void;
   onDeleteUserProfile?: (id: string) => void;
   onResetSystemForUAT?: () => Promise<void> | void;
+  onRolePermissionMatrixChange?: (rows: MatrixRow[]) => void;
 }> = ({
   tab,
   currentUser,
@@ -2648,6 +2649,7 @@ export const MasterDataSetupAccessView: React.FC<{
   onUpdateUserProfile,
   onDeleteUserProfile,
   onResetSystemForUAT,
+  onRolePermissionMatrixChange,
 }) => {
   const isSystemAdmin =
     Boolean(currentUser.headerSubtitle?.includes('System administrator')) ||
@@ -3016,6 +3018,7 @@ export const MasterDataSetupAccessView: React.FC<{
 
   const handleSaveMatrix = () => {
     saveMasterData('role_permissions_matrix', matrixRows);
+    onRolePermissionMatrixChange?.(matrixRows);
     setIsEditingMatrix(false);
     setMatrixRowsBeforeEdit(null);
     notifyAccess('success', 'Role permission matrix successfully saved and updated in system configuration.');
@@ -3064,6 +3067,7 @@ export const MasterDataSetupAccessView: React.FC<{
   const handleResetMatrix = () => {
     setMatrixRows(DEFAULT_ROLE_PERMISSIONS_MATRIX);
     saveMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX);
+    onRolePermissionMatrixChange?.(DEFAULT_ROLE_PERMISSIONS_MATRIX);
     setIsEditingMatrix(false);
     setMatrixRowsBeforeEdit(null);
     notifyAccess('success', 'Role permission matrix reset to baseline standards.');
@@ -3095,7 +3099,6 @@ export const MasterDataSetupAccessView: React.FC<{
     };
     const updated = [...matrixRows, newRow];
     setMatrixRows(updated);
-    saveMasterData('role_permissions_matrix', updated);
     setNewMatrixCapability('');
     notifyAccess('success', `Added new capability "${newMatrixCapability.trim()}" to matrix.`);
   };

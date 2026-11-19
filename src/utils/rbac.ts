@@ -23,6 +23,18 @@ export interface AppRoleDefinition {
   builtIn?: boolean;
 }
 
+export interface RolePermissionMatrixRow {
+  capability: string;
+  rolePermissions?: Record<string, string>;
+  sysAdmin?: string;
+  cae?: string;
+  divHead?: string;
+  supervising?: string;
+  inCharge?: string;
+  assisting?: string;
+  auditee?: string;
+}
+
 export const DEFAULT_ROLE_DEFINITIONS: AppRoleDefinition[] = APP_ROLES.map((name) => ({
   name,
   accessRole: name,
@@ -171,9 +183,90 @@ export function getRoleAuthorityInfo(role?: string): RoleAuthorityInfo {
 export function canAccessTab(
   userRole?: string,
   tab?: MainTabId,
-  accessActive = true
+  accessActive = true,
+  permissionMatrix?: RolePermissionMatrixRow[]
 ): { allowed: boolean; reason?: string; requiredRole?: string } {
   if (!accessActive) return { allowed: true };
+  const baseAccess = canAccessTabByRole(userRole, tab);
+  if (!baseAccess.allowed || !tab) return baseAccess;
+
+  const capability = getTabCapability(tab);
+  if (!capability || hasMatrixCapability(userRole, capability, permissionMatrix)) return baseAccess;
+
+  return {
+    allowed: false,
+    reason: `Your role does not have permission for "${capability}" in the active role permission matrix.`,
+    requiredRole: 'A role granted this capability in the permission matrix',
+  };
+}
+
+export function hasMatrixCapability(
+  userRole: string | undefined,
+  capability: string,
+  permissionMatrix?: RolePermissionMatrixRow[]
+): boolean {
+  if (!permissionMatrix) return true;
+  const row = permissionMatrix.find((item) => item.capability === capability);
+  if (!row) return true;
+
+  const normalizedRole = normalizeRole(userRole);
+  const configuredEntry = Object.entries(row.rolePermissions ?? {}).find(
+    ([roleName]) => normalizeRole(roleName) === normalizedRole
+  );
+  let permission = configuredEntry?.[1];
+
+  if (permission === undefined) {
+    const legacyField: Partial<Record<AppRole, keyof RolePermissionMatrixRow>> = {
+      'System administrator': 'sysAdmin',
+      'Chief Audit Executive': 'cae',
+      'Audit Division Head': 'divHead',
+      'Audit Supervisor': 'supervising',
+      'Independent Reviewer': 'supervising',
+      'Audit-in-Charge': 'inCharge',
+      'Assisting Auditor': 'assisting',
+      'Audit Committee Member': 'auditee',
+      'Group Head (auditee)': 'auditee',
+      'Department Head (auditee)': 'auditee',
+      'Issue Owner (auditee)': 'auditee',
+    };
+    if (normalizedRole === 'Executive Viewer') {
+      permission = capability.startsWith('System Setup,') ||
+        capability.startsWith('User Accounts & Role Assignments')
+        ? '—'
+        : 'View';
+    } else {
+      const field = legacyField[normalizedRole];
+      const legacyPermission = field ? row[field] : undefined;
+      permission = typeof legacyPermission === 'string' ? legacyPermission : '—';
+    }
+  }
+  return permission.trim() !== '' && permission.trim() !== '—';
+}
+
+const getTabCapability = (tab: MainTabId): string | undefined => {
+  switch (tab) {
+    case 'universe':
+      return 'Audit Universe & Inherent Risk Scoring';
+    case 'annual-plan':
+    case 'timeline':
+      return 'Annual Audit Plan & Budgeted Hours';
+    case 'issues':
+      return 'Stage 06 Follow-up, Extensions & Issue Closure';
+    case 'master-data':
+    case 'settings':
+    case 'setup':
+      return 'System Setup, Master Data & Settings';
+    case 'access':
+      return 'User Accounts & Role Assignments (Access)';
+    default:
+      return undefined;
+  }
+};
+
+function canAccessTabByRole(
+  userRole?: string,
+  tab?: MainTabId
+): { allowed: boolean; reason?: string; requiredRole?: string } {
   const norm = normalizeRole(userRole);
 
   if (norm === 'System administrator') return { allowed: true };

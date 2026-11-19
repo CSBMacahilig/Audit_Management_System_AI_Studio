@@ -19,6 +19,7 @@ import { FieldworkView } from './components/FieldworkView';
 import { SettingsView } from './components/SettingsView';
 import {
   AuditUniverseView,
+  DEFAULT_ROLE_PERMISSIONS_MATRIX,
   DEFAULT_SETUP_ITEMS,
   IssuesView,
   MasterDataSetupAccessView,
@@ -27,7 +28,12 @@ import {
 } from './components/AdditionalViews';
 import { LoginPage, ForcePasswordChange } from './components/LoginPage';
 import { AdminUserManagement } from './components/AdminUserManagement';
-import { canAccessTab, DEFAULT_ROLE_DEFINITIONS } from './utils/rbac';
+import {
+  canAccessTab,
+  DEFAULT_ROLE_DEFINITIONS,
+  hasMatrixCapability,
+  RolePermissionMatrixRow,
+} from './utils/rbac';
 import { AccessGuard } from './components/AccessGuard';
 import {
   AuthSession,
@@ -118,6 +124,7 @@ export default function App() {
   const [issues, setIssues] = useState<IssueRegisterItem[]>([]);
   const [universe, setUniverse] = useState<UniverseEntity[]>([]);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrixRow[]>(DEFAULT_ROLE_PERMISSIONS_MATRIX);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [accessActive, setAccessActive] = useState<boolean>(true);
   const [dataLoading, setDataLoading] = useState(true);
@@ -140,10 +147,12 @@ export default function App() {
       fetchUserProfiles(),
       fetchFrequencies(),
       fetchMasterData('app_roles', DEFAULT_ROLE_DEFINITIONS),
-    ]).then(([engs, iss, uni, profiles, freq]) => {
+      fetchMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX),
+    ]).then(([engs, iss, uni, profiles, freq, _roles, matrix]) => {
       setEngagements(engs);
       setIssues(iss);
       setUniverse(uni);
+      setPermissionMatrix(matrix);
       if (authSession) {
         const matched = profiles.find(
           (p) =>
@@ -758,6 +767,7 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
         activeLifecycleStage={activeLifecycleStage}
+        activeSubTab={activeSubTab}
         maxCompletedStage={
           selectedEngagement
             ? Math.max(selectedEngagement.lifecycleStage - 1, activeLifecycleStage - 1)
@@ -767,6 +777,7 @@ export default function App() {
         currentUser={currentUser ?? FALLBACK_USER}
         onChangeUser={setCurrentUser}
         userProfiles={roleSimulationProfiles}
+        permissionMatrix={permissionMatrix}
         canSimulateAccess={authSession.role === 'admin'}
         accessActive={accessActive}
         onToggleAccess={() => {
@@ -785,10 +796,38 @@ export default function App() {
           const tabCheck = canAccessTab(
             currentUser?.headerSubtitle || currentUser?.roleTitle,
             activeTab,
-            accessActive
+            accessActive,
+            permissionMatrix
           );
+          const fieldworkCapability = activeTab === 'fieldwork'
+            ? ({
+              dashboard: activeLifecycleStage === 2
+                ? 'Stage 02 Notification & Kickoff Memo'
+                : 'Stage 03 Working Papers — Prepare & Submit',
+                'working-notes': 'Stage 03 Working Papers — Prepare & Submit',
+                findings: 'Stage 03 Working Papers — Prepare & Submit',
+                review: 'Stage 03 Tier 1 Independent Quality Review',
+                auditee: 'Stage 04 Exit Conference & Management Responses',
+                files: 'Stage 03 Working Papers — Prepare & Submit',
+                report: 'Stage 05 Final Audit Report Issuance',
+                'audit-trail': 'Stage 03 Working Papers — Prepare & Submit',
+              } satisfies Record<EngagementSubTabId, string>)[activeSubTab]
+            : undefined;
+          const fieldworkCheck = fieldworkCapability && accessActive &&
+            !hasMatrixCapability(
+              currentUser?.headerSubtitle || currentUser?.roleTitle,
+              fieldworkCapability,
+              permissionMatrix
+            )
+            ? {
+                allowed: false,
+                reason: `Your role does not have permission for "${fieldworkCapability}" in the active role permission matrix.`,
+                requiredRole: 'A role granted this capability in the permission matrix',
+              }
+            : undefined;
+          const accessCheck = !tabCheck.allowed ? tabCheck : fieldworkCheck ?? tabCheck;
 
-          if (!tabCheck.allowed) {
+          if (!accessCheck.allowed) {
             const tabNames: Record<MainTabId, string> = {
               overview: 'Overview',
               universe: 'Audit Universe',
@@ -807,8 +846,8 @@ export default function App() {
                 tabName={tabNames[activeTab] || activeTab}
                 tabId={activeTab}
                 currentUser={currentUser ?? FALLBACK_USER}
-                reason={tabCheck.reason}
-                requiredRole={tabCheck.requiredRole}
+                reason={accessCheck.reason}
+                requiredRole={accessCheck.requiredRole}
                 onGoToOverview={() => handleSelectTab('overview')}
                 onSwitchRole={authSession.role === 'admin' ? () => {
                   const profiles = roleSimulationProfiles;
@@ -945,6 +984,7 @@ export default function App() {
                   onUpdateUserProfile={handleUpdateUserProfile}
                   onDeleteUserProfile={handleDeleteUserProfile}
                   onResetSystemForUAT={handleResetSystemForUAT}
+                  onRolePermissionMatrixChange={setPermissionMatrix}
                 />
               )}
             </>

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   LIFECYCLE_STAGES,
+  EngagementSubTabId,
   LifecycleStageId,
   MainTabId,
   UserProfile,
@@ -8,17 +9,24 @@ import {
 } from '../data/auditData';
 import { Check, Lock } from 'lucide-react';
 import { AuthSession } from '../utils/authStore';
-import { canAccessTab, getRoleAuthorityInfo } from '../utils/rbac';
+import {
+  canAccessTab,
+  getRoleAuthorityInfo,
+  hasMatrixCapability,
+  RolePermissionMatrixRow,
+} from '../utils/rbac';
 
 interface HeaderAndLifecycleProps {
   activeTab: MainTabId;
   onSelectTab: (tab: MainTabId) => void;
   activeLifecycleStage: LifecycleStageId;
+  activeSubTab: EngagementSubTabId;
   maxCompletedStage: number;
   onSelectLifecycleStage: (stageId: LifecycleStageId) => void;
   currentUser: UserProfile;
   onChangeUser: (user: UserProfile) => void;
   userProfiles: UserProfile[];
+  permissionMatrix: RolePermissionMatrixRow[];
   canSimulateAccess: boolean;
   accessActive: boolean;
   onToggleAccess: () => void;
@@ -48,10 +56,12 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   activeTab,
   onSelectTab,
   activeLifecycleStage,
+  activeSubTab,
   onSelectLifecycleStage,
   currentUser,
   onChangeUser,
   userProfiles,
+  permissionMatrix,
   canSimulateAccess,
   accessActive,
   onToggleAccess,
@@ -294,11 +304,37 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
       <div className="mt-3.5 bg-[#F7A81B] rounded-lg px-2 sm:px-4 shadow-2xs flex items-center overflow-x-auto no-scrollbar">
         {MAIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
-          const accessCheck = canAccessTab(
+          const roleAccessCheck = canAccessTab(
             currentUser.headerSubtitle || currentUser.roleTitle,
             tab.id,
-            accessActive
+            accessActive,
+            permissionMatrix
           );
+          const fieldworkCapability = activeSubTab === 'dashboard' && activeLifecycleStage === 2
+            ? 'Stage 02 Notification & Kickoff Memo'
+            : ({
+                dashboard: 'Stage 03 Working Papers — Prepare & Submit',
+                'working-notes': 'Stage 03 Working Papers — Prepare & Submit',
+                findings: 'Stage 03 Working Papers — Prepare & Submit',
+                review: 'Stage 03 Tier 1 Independent Quality Review',
+                auditee: 'Stage 04 Exit Conference & Management Responses',
+                files: 'Stage 03 Working Papers — Prepare & Submit',
+                report: 'Stage 05 Final Audit Report Issuance',
+                'audit-trail': 'Stage 03 Working Papers — Prepare & Submit',
+              } satisfies Record<EngagementSubTabId, string>)[activeSubTab];
+          const fieldworkDenied = tab.id === 'fieldwork' && accessActive &&
+            !hasMatrixCapability(
+              currentUser.headerSubtitle || currentUser.roleTitle,
+              fieldworkCapability,
+              permissionMatrix
+            );
+          const accessCheck = fieldworkDenied
+            ? {
+                allowed: false,
+                reason: `Your role does not have permission for "${fieldworkCapability}" in the active role permission matrix.`,
+                requiredRole: 'A role granted this capability in the permission matrix',
+              }
+            : roleAccessCheck;
           const isRestricted = !accessCheck.allowed;
 
           return (
