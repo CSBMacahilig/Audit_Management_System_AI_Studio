@@ -7,6 +7,7 @@ import {
   IssueRegisterItem,
   LifecycleStageId,
   MainTabId,
+  USERS,
   UniverseEntity,
   UniverseRecord,
   UserProfile,
@@ -120,6 +121,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [accessActive, setAccessActive] = useState<boolean>(true);
   const [dataLoading, setDataLoading] = useState(true);
+  const roleSimulationProfiles = userProfiles.length > 0 ? userProfiles : USERS;
 
   const [frequencies, setFrequenciesState] = useState<AuditFrequencies>({
     high: 12,
@@ -151,9 +153,9 @@ export default function App() {
             p.fullLabel.toLowerCase().includes(authSession.username.toLowerCase()) ||
             (authSession.username && p.employeeNumber && p.employeeNumber.toLowerCase() === authSession.username.toLowerCase())
         );
-        setCurrentUser(matched ?? profiles[0] ?? FALLBACK_USER);
+        setCurrentUser(matched ?? profiles[0] ?? USERS[0] ?? FALLBACK_USER);
       } else {
-        setCurrentUser(profiles[0] ?? FALLBACK_USER);
+        setCurrentUser(profiles[0] ?? USERS[0] ?? FALLBACK_USER);
       }
       setFrequenciesState(freq);
     }).catch((err) => {
@@ -764,7 +766,7 @@ export default function App() {
         onSelectLifecycleStage={handleSelectLifecycleStage}
         currentUser={currentUser ?? FALLBACK_USER}
         onChangeUser={setCurrentUser}
-        userProfiles={userProfiles}
+        userProfiles={roleSimulationProfiles}
         canSimulateAccess={authSession.role === 'admin'}
         accessActive={accessActive}
         onToggleAccess={() => {
@@ -809,7 +811,7 @@ export default function App() {
                 requiredRole={tabCheck.requiredRole}
                 onGoToOverview={() => handleSelectTab('overview')}
                 onSwitchRole={authSession.role === 'admin' ? () => {
-                  const profiles = userProfiles.length > 0 ? userProfiles : [FALLBACK_USER];
+                  const profiles = roleSimulationProfiles;
                   const currentIdx = profiles.findIndex((u) => u.id === currentUser?.id);
                   const nextUser = profiles[(currentIdx + 1) % profiles.length];
                   if (nextUser) setCurrentUser(nextUser);
@@ -893,7 +895,7 @@ export default function App() {
                   currentUser={currentUser ?? FALLBACK_USER}
                   onChangeUser={setCurrentUser}
                   canSimulateRole={authSession.role === 'admin'}
-                  userProfiles={userProfiles}
+                  userProfiles={roleSimulationProfiles}
                   accessActive={accessActive}
                   onApproveWorkingNote={handleApproveWorkingNote}
                   onCompleteActivity={handleCompleteActivity}

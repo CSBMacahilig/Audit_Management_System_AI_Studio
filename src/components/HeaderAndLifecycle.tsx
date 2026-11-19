@@ -202,18 +202,21 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
                 <button
                   type="button"
                   onClick={onToggleAccess}
+                  aria-label={`Switch mode from ${accessActive ? 'access enforced' : 'access simulated'}`}
+                  title={`Current mode: ${accessActive ? 'Access enforced' : 'Access simulated'}. Click to switch mode.`}
                   className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  {accessActive ? 'Simulate access' : 'Activate access'}
+                  Switch mode
                 </button>
 
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setShowUserMenu((prev) => !prev)}
+                    aria-expanded={showUserMenu}
                     className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    Switch audit role
+                    Working as
                   </button>
 
                   {showUserMenu && (
