@@ -2561,6 +2561,7 @@ export interface MatrixRow {
   assisting: string;
   auditee: string;
   rolePermissions?: Record<string, string>;
+  rolePermissionDefaults?: Record<string, string>;
 }
 
 const getMatrixValue = (row: MatrixRow, role: AppRoleDefinition): string => {
@@ -2587,6 +2588,24 @@ const getMatrixValue = (row: MatrixRow, role: AppRoleDefinition): string => {
   };
   const value = row[matrixField[role.accessRole]];
   return typeof value === 'string' ? value : '—';
+};
+
+const getDefaultMatrixPermission = (row: MatrixRow, role: AppRoleDefinition): string => {
+  const baseline = DEFAULT_ROLE_PERMISSIONS_MATRIX.find(
+    (candidate) => candidate.capability === row.capability
+  );
+  if (baseline) return getMatrixValue(baseline, role);
+
+  switch (role.accessRole) {
+    case 'System administrator': return 'Full';
+    case 'Chief Audit Executive': return 'Approve';
+    case 'Audit Division Head':
+    case 'Audit Supervisor':
+    case 'Independent Reviewer': return 'Review';
+    case 'Audit-in-Charge': return 'Lead';
+    case 'Assisting Auditor': return 'Perform';
+    default: return 'View';
+  }
 };
 
 export const DEFAULT_ROLE_PERMISSIONS_MATRIX: MatrixRow[] = [
@@ -2707,6 +2726,7 @@ export const MasterDataSetupAccessView: React.FC<{
   // ── Configurable Role Permissions Matrix ───────────────────────────────────
   const [matrixRows, setMatrixRows] = useState<MatrixRow[]>(DEFAULT_ROLE_PERMISSIONS_MATRIX);
   const [isEditingMatrix, setIsEditingMatrix] = useState(false);
+  const [matrixRowsBeforeEdit, setMatrixRowsBeforeEdit] = useState<MatrixRow[] | null>(null);
   const [newMatrixCapability, setNewMatrixCapability] = useState('');
 
   // ── Load persisted master data & setup checklist on mount ───────────────────
@@ -2970,21 +2990,41 @@ export const MasterDataSetupAccessView: React.FC<{
   };
 
   // ── Handlers: Role Permissions Matrix ──────────────────────────────────────
-  const handleMatrixCellChange = (rowIdx: number, roleName: string, val: string) => {
-    setMatrixRows((prev) => {
-      const updated = [...prev];
-      updated[rowIdx] = {
-        ...updated[rowIdx],
-        rolePermissions: { ...updated[rowIdx].rolePermissions, [roleName]: val },
+  const handleMatrixPermissionToggle = (rowIdx: number, role: AppRoleDefinition, enabled: boolean) => {
+    setMatrixRows((prev) => prev.map((row, index) => {
+      if (index !== rowIdx) return row;
+      const currentValue = getMatrixValue(row, role);
+      const defaults = { ...row.rolePermissionDefaults };
+      if (enabled) {
+        const restoredValue = defaults[role.name] || getDefaultMatrixPermission(row, role);
+        delete defaults[role.name];
+        return {
+          ...row,
+          rolePermissions: { ...row.rolePermissions, [role.name]: restoredValue },
+          rolePermissionDefaults: defaults,
+        };
+      }
+
+      if (currentValue !== '—') defaults[role.name] = currentValue;
+      return {
+        ...row,
+        rolePermissions: { ...row.rolePermissions, [role.name]: '—' },
+        rolePermissionDefaults: defaults,
       };
-      return updated;
-    });
+    }));
   };
 
   const handleSaveMatrix = () => {
     saveMasterData('role_permissions_matrix', matrixRows);
     setIsEditingMatrix(false);
+    setMatrixRowsBeforeEdit(null);
     notifyAccess('success', 'Role permission matrix successfully saved and updated in system configuration.');
+  };
+
+  const handleCancelMatrixEdit = () => {
+    if (matrixRowsBeforeEdit) setMatrixRows(matrixRowsBeforeEdit);
+    setMatrixRowsBeforeEdit(null);
+    setIsEditingMatrix(false);
   };
 
   const handleAddRole = () => {
@@ -3025,6 +3065,7 @@ export const MasterDataSetupAccessView: React.FC<{
     setMatrixRows(DEFAULT_ROLE_PERMISSIONS_MATRIX);
     saveMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX);
     setIsEditingMatrix(false);
+    setMatrixRowsBeforeEdit(null);
     notifyAccess('success', 'Role permission matrix reset to baseline standards.');
   };
 
@@ -5363,7 +5404,7 @@ export const MasterDataSetupAccessView: React.FC<{
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Maintain the role-to-capability matrix across the 6-stage audit lifecycle. Application access follows each role’s selected access template.
+              Check or uncheck role permissions while editing. Checked capabilities retain their permission level; unchecked capabilities are denied.
             </p>
           </div>
 
@@ -5371,7 +5412,14 @@ export const MasterDataSetupAccessView: React.FC<{
             {!isEditingMatrix ? (
               <button
                 type="button"
-                onClick={() => setIsEditingMatrix(true)}
+                onClick={() => {
+                  setMatrixRowsBeforeEdit(matrixRows.map((row) => ({
+                    ...row,
+                    rolePermissions: row.rolePermissions ? { ...row.rolePermissions } : undefined,
+                    rolePermissionDefaults: row.rolePermissionDefaults ? { ...row.rolePermissionDefaults } : undefined,
+                  })));
+                  setIsEditingMatrix(true);
+                }}
                 className="px-3.5 py-1.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer transition-colors"
               >
                 ⚙️ Configure matrix
@@ -5394,7 +5442,7 @@ export const MasterDataSetupAccessView: React.FC<{
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsEditingMatrix(false)}
+                  onClick={handleCancelMatrixEdit}
                   className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-medium rounded-md cursor-pointer transition-colors"
                 >
                   Cancel
@@ -5445,23 +5493,25 @@ export const MasterDataSetupAccessView: React.FC<{
                     const value = getMatrixValue(row, role);
                     return (
                       <td key={role.name} className="py-2.5 px-2">
-                        {isEditingMatrix ? (
+                        <label className="inline-flex items-center gap-1.5">
                           <input
-                            type="text"
-                            value={value}
-                            onChange={(e) => handleMatrixCellChange(rIdx, role.name, e.target.value)}
+                            type="checkbox"
+                            checked={value !== '—'}
+                            disabled={!isEditingMatrix}
+                            onChange={(event) => handleMatrixPermissionToggle(rIdx, role, event.target.checked)}
                             aria-label={`${row.capability} permission for ${role.name}`}
-                            className="w-28 px-1.5 py-1 border border-slate-300 rounded text-xs bg-white"
+                            className="h-4 w-4 accent-[#492785] disabled:opacity-70"
                           />
-                        ) : (
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                            value === 'Full' ? 'bg-purple-100 text-purple-900' :
-                              value.includes('Approve') || value.includes('Sign') ? 'bg-[#E4DDF8] text-[#492785] font-semibold' :
-                                value === '—' ? 'text-slate-400' : 'text-slate-700'
-                          }`}>
-                            {value}
-                          </span>
-                        )}
+                          {value !== '—' && (
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                              value === 'Full' ? 'bg-purple-100 text-purple-900' :
+                                value.includes('Approve') || value.includes('Sign') ? 'bg-[#E4DDF8] text-[#492785] font-semibold' :
+                                  'text-slate-700'
+                            }`}>
+                              {value}
+                            </span>
+                          )}
+                        </label>
                       </td>
                     );
                   })}
