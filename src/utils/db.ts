@@ -30,6 +30,7 @@ import {
   normalizeLegacyIdentifier,
   normalizeYearIdentifier,
 } from './identifiers';
+import { getCurrentAccountEmail } from './auditMetadata';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row mappers
@@ -72,6 +73,9 @@ function rowToEngagement(row: any, subs: {
     reportRating: row.report_rating ?? undefined,
     reportRef: row.report_ref,
     executiveSummary: row.executive_summary,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? row.updated_at ?? undefined,
     ...subs,
   };
 }
@@ -90,6 +94,9 @@ function rowToWorkingNote(row: any): WorkingNote {
     testingProcedure: row.testing_procedure,
     conclusion: row.conclusion,
     reviewerComments: row.reviewer_comments ?? undefined,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? undefined,
   };
 }
 
@@ -109,6 +116,9 @@ function rowToFinding(row: any): AuditFinding {
     targetDate: row.target_date,
     status: row.status,
     linkedNoteRef: row.linked_note_ref,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? undefined,
   };
 }
 
@@ -168,6 +178,9 @@ function rowToIssue(row: any): IssueRegisterItem {
     status: row.status,
     actionPlanSummary: row.action_plan_summary,
     evidenceNote: row.evidence_note ?? undefined,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? row.updated_at ?? undefined,
   };
 }
 
@@ -187,6 +200,9 @@ function rowToUniverse(row: any): UniverseEntity {
     nextDue: row.next_due,
     cycleMonths: row.cycle_months,
     defaultLead: row.default_lead,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? row.updated_at ?? undefined,
   };
 }
 
@@ -260,6 +276,8 @@ export async function fetchEngagements(): Promise<AuditEngagement[]> {
 }
 
 export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('engagements').upsert({
     id: eng.id,
     ref: eng.ref,
@@ -289,12 +307,17 @@ export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
     report_rating: eng.reportRating ?? null,
     report_ref: eng.reportRef,
     executive_summary: eng.executiveSummary,
+    added_by: eng.addedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('upsertEngagement:', error.message);
 }
 
 export async function upsertWorkingNote(engagementId: string, note: WorkingNote): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('working_notes').upsert({
     id: note.id,
     engagement_id: engagementId,
@@ -308,11 +331,16 @@ export async function upsertWorkingNote(engagementId: string, note: WorkingNote)
     testing_procedure: note.testingProcedure,
     conclusion: note.conclusion,
     reviewer_comments: note.reviewerComments ?? null,
+    added_by: note.addedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
   });
   if (error) console.error('upsertWorkingNote:', error.message);
 }
 
 export async function upsertFinding(engagementId: string, finding: AuditFinding): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('findings').upsert({
     id: finding.id,
     engagement_id: engagementId,
@@ -328,11 +356,16 @@ export async function upsertFinding(engagementId: string, finding: AuditFinding)
     target_date: finding.targetDate,
     status: finding.status,
     linked_note_ref: finding.linkedNoteRef,
+    added_by: finding.addedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
   });
   if (error) console.error('upsertFinding:', error.message);
 }
 
 export async function upsertTimelineActivity(engagementId: string, activity: TimelineActivity): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('timeline_activities').upsert({
     id: activity.id,
     engagement_id: engagementId,
@@ -342,11 +375,16 @@ export async function upsertTimelineActivity(engagementId: string, activity: Tim
     completed_date: activity.completedDate ?? null,
     status: activity.status,
     stage_id: activity.stageId,
+    added_by: actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
   });
   if (error) console.error('upsertTimelineActivity:', error.message);
 }
 
 export async function insertFile(engagementId: string, file: AuditFile): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('engagement_files').insert({
     id: file.id,
     engagement_id: engagementId,
@@ -355,11 +393,16 @@ export async function insertFile(engagementId: string, file: AuditFile): Promise
     size: file.size,
     uploaded_by: file.uploadedBy,
     uploaded_at: file.uploadedAt,
+    added_by: file.uploadedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
   });
   if (error) console.error('insertFile:', error.message);
 }
 
 export async function insertActivityLog(engagementId: string, log: ActivityLogItem): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('activity_logs').insert({
     id: log.id,
     engagement_id: engagementId,
@@ -367,6 +410,9 @@ export async function insertActivityLog(engagementId: string, log: ActivityLogIt
     actor: log.actor,
     action: log.action,
     detail: log.detail ?? null,
+    added_by: log.actor || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
   });
   if (error) console.error('insertActivityLog:', error.message);
 }
@@ -382,6 +428,8 @@ export async function fetchIssues(): Promise<IssueRegisterItem[]> {
 }
 
 export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('issues_register').upsert({
     id: issue.id,
     ref: issue.ref,
@@ -400,6 +448,9 @@ export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
     status: issue.status,
     action_plan_summary: issue.actionPlanSummary,
     evidence_note: issue.evidenceNote ?? null,
+    added_by: issue.addedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('upsertIssue:', error.message);
@@ -419,6 +470,8 @@ export async function fetchUniverse(): Promise<UniverseEntity[]> {
 }
 
 export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('universe_entities').upsert({
     id: entity.id,
     code: entity.code,
@@ -433,6 +486,9 @@ export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void
     next_due: entity.nextDue,
     cycle_months: entity.cycleMonths,
     default_lead: entity.defaultLead,
+    added_by: entity.addedBy || actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('upsertUniverseEntity:', error.message);
@@ -486,6 +542,8 @@ export async function fetchUserProfiles(): Promise<UserProfile[]> {
 }
 
 export async function upsertUserProfile(u: UserProfile): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('user_profiles').upsert({
     id: u.id,
     name: u.name,
@@ -507,6 +565,9 @@ export async function upsertUserProfile(u: UserProfile): Promise<void> {
     password_history: u.passwordHistory ?? [],
     mfa_enabled: u.mfaEnabled ?? false,
     is_privileged: u.isPrivileged ?? false,
+    added_by: actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('upsertUserProfile:', error.message);
@@ -530,9 +591,14 @@ export async function fetchFrequencies(): Promise<AuditFrequencies> {
 }
 
 export async function saveFrequencies(freq: AuditFrequencies): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('audit_frequencies').upsert({
     id: 'global',
     ...freq,
+    added_by: actor,
+    modified_by: actor,
+    modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('saveFrequencies:', error.message);
@@ -576,6 +642,8 @@ export async function fetchMasterData<T>(key: string, fallback: T): Promise<T> {
 }
 
 export async function saveMasterData<T>(key: string, value: T): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const modifiedAt = new Date().toISOString();
   // 1. Immediately write to localStorage so reload NEVER loses data
   try {
     localStorage.setItem(`ams_master_${key}`, JSON.stringify(value));
@@ -588,6 +656,9 @@ export async function saveMasterData<T>(key: string, value: T): Promise<void> {
     await supabase.from('master_data').upsert({
       id: key,
       data: value as any,
+      added_by: actor,
+      modified_by: actor,
+      modified_at: modifiedAt,
       updated_at: new Date().toISOString(),
     });
   } catch {

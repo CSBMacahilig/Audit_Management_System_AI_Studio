@@ -4,6 +4,7 @@ import {
   nextIdentifierSequence,
   normalizeLegacyIdentifier,
 } from '../utils/identifiers';
+import { formatAuditDate, getCurrentAccountEmail } from '../utils/auditMetadata';
 import { fetchMasterData, saveMasterData } from '../utils/db';
 import {
   AuditEngagement,
@@ -598,6 +599,9 @@ export const AuditUniverseView: React.FC<{
       lastAudit: formattedLastAudit,
       nextDue,
       nextDueStatus: 'On track',
+      addedBy: getCurrentAccountEmail(),
+      modifiedBy: getCurrentAccountEmail(),
+      modifiedAt: new Date().toISOString(),
     };
     setRecords((prev) => [added, ...prev]);
 
@@ -616,6 +620,9 @@ export const AuditUniverseView: React.FC<{
         nextDue: added.nextDue,
         cycleMonths: added.cycleMonths,
         defaultLead: added.owner,
+        addedBy: added.addedBy,
+        modifiedBy: added.modifiedBy,
+        modifiedAt: added.modifiedAt,
       });
     }
 
@@ -651,6 +658,8 @@ export const AuditUniverseView: React.FC<{
       lastAudit: formattedLastAudit,
       nextDue,
       nextDueStatus: editNextDueStatus,
+      modifiedBy: getCurrentAccountEmail(),
+      modifiedAt: new Date().toISOString(),
     };
 
     setRecords((prev) => prev.map((r) => (r.id === editingRecord.id ? updated : r)));
@@ -671,6 +680,9 @@ export const AuditUniverseView: React.FC<{
         nextDue: updated.nextDue,
         cycleMonths: updated.cycleMonths,
         defaultLead: updated.owner,
+        addedBy: updated.addedBy,
+        modifiedBy: updated.modifiedBy,
+        modifiedAt: updated.modifiedAt,
       });
     }
 
@@ -759,6 +771,9 @@ export const AuditUniverseView: React.FC<{
               <th className="py-2.5 px-4">CYCLE</th>
               <th className="py-2.5 px-4">LAST AUDIT</th>
               <th className="py-2.5 px-4">NEXT DUE</th>
+              <th className="py-2.5 px-4">ADDED BY</th>
+              <th className="py-2.5 px-4">MODIFIED BY</th>
+              <th className="py-2.5 px-4">LAST MODIFIED</th>
               <th className="py-2.5 pl-4 text-right">ACTIONS</th>
             </tr>
           </thead>
@@ -821,6 +836,15 @@ export const AuditUniverseView: React.FC<{
                     >
                       {rec.nextDueStatus}
                     </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-700 text-xs break-all">
+                    {rec.addedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-700 text-xs break-all">
+                    {rec.modifiedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-600 text-xs whitespace-nowrap">
+                    {formatAuditDate(rec.modifiedAt)}
                   </td>
                   <td className="py-3.5 pl-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
@@ -1520,6 +1544,8 @@ export const IssuesView: React.FC<{
     const updated: IssueRegisterItem = {
       ...issue,
       status: 'Closed',
+      modifiedBy: getCurrentAccountEmail(),
+      modifiedAt: new Date().toISOString(),
       isOverdue: false,
       isDueSoon: false,
       daysStatus: 'Closed 4 Oct 2026',
@@ -1540,6 +1566,8 @@ export const IssuesView: React.FC<{
     const updated: IssueRegisterItem = {
       ...issue,
       currentDue: formatDateForDisplay(extensionDate),
+      modifiedBy: getCurrentAccountEmail(),
+      modifiedAt: new Date().toISOString(),
       extensionCount: issue.extensionCount + 1,
       isOverdue: false,
       daysStatus: `Extended to ${formatDateForDisplay(extensionDate)}`,
@@ -1658,6 +1686,9 @@ export const IssuesView: React.FC<{
                 <th className="py-2.5 px-4">ORIGINAL DUE</th>
                 <th className="py-2.5 px-4">CURRENT DUE</th>
                 <th className="py-2.5 px-4">STATUS</th>
+                <th className="py-2.5 px-4">ADDED BY</th>
+                <th className="py-2.5 px-4">MODIFIED BY</th>
+                <th className="py-2.5 px-4">LAST MODIFIED</th>
                 <th className="py-2.5 pl-4 text-right" />
               </tr>
             </thead>
@@ -1741,6 +1772,15 @@ export const IssuesView: React.FC<{
                         In progress
                       </span>
                     )}
+                  </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-700 break-all">
+                    {iss.addedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-700 break-all">
+                    {iss.modifiedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-600 whitespace-nowrap">
+                    {formatAuditDate(iss.modifiedAt)}
                   </td>
                   <td className="py-3.5 pl-4 align-top text-right">
                     <button

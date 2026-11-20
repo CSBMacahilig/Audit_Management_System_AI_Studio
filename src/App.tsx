@@ -68,6 +68,7 @@ import {
 import { SizingConfig } from './data/auditData';
 import { canTransitionEngagementStatus, EngagementStatus } from './utils/brw';
 import { formatIdentifier, formatYearIdentifier } from './utils/identifiers';
+import { getCurrentAccountEmail } from './utils/auditMetadata';
 
 // Fallback profile used when user_profiles table is empty (fresh database)
 const FALLBACK_USER: UserProfile = {
@@ -660,6 +661,8 @@ export default function App() {
         const updated = {
           ...eng,
           status,
+          modifiedBy: getCurrentAccountEmail(),
+          modifiedAt: new Date().toISOString(),
           activityLog: [logEntry, ...eng.activityLog],
         };
         upsertEngagement(updated);
@@ -918,6 +921,9 @@ export default function App() {
                     nextDueStatus: (u.nextDue && u.nextDue.toLowerCase().includes('overdue')
                       ? 'Overdue'
                       : 'On track') as 'Overdue' | 'Due soon' | 'On track',
+                    addedBy: u.addedBy,
+                    modifiedBy: u.modifiedBy,
+                    modifiedAt: u.modifiedAt,
                   }))}
                   frequencies={frequencies}
                   isReauditMode={activeLifecycleStage === 7}

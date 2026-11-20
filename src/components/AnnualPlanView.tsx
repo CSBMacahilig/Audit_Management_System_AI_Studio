@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatYearIdentifier, normalizeYearIdentifier } from '../utils/identifiers';
+import { formatAuditDate, getCurrentAccountEmail } from '../utils/auditMetadata';
 import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay } from '../utils/date';
@@ -185,6 +186,9 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       reportStatus: 'Draft',
       reportRef: `IA-${selectedYear}-0${nextNum}-RPT`,
       executiveSummary: `Scheduled audit engagement for ${newEntity.trim()}.`,
+      addedBy: getCurrentAccountEmail(),
+      modifiedBy: getCurrentAccountEmail(),
+      modifiedAt: new Date().toISOString(),
       workingNotes: [],
       findings: [],
       timelineActivities: [],
@@ -326,6 +330,9 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
               <th className="py-2.5 px-4 w-32">LEAD</th>
               <th className="py-2.5 px-4 w-44">DATES</th>
               <th className="py-2.5 pl-4 w-32">STATUS</th>
+              <th className="py-2.5 px-4">ADDED BY</th>
+              <th className="py-2.5 px-4">MODIFIED BY</th>
+              <th className="py-2.5 px-4">LAST MODIFIED</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px]">
@@ -384,13 +391,22 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                       </span>
                     </div>
                   </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-700 break-all">
+                    {eng.addedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-700 break-all">
+                    {eng.modifiedBy || '—'}
+                  </td>
+                  <td className="py-3.5 px-4 align-top text-xs text-slate-600 whitespace-nowrap">
+                    {formatAuditDate(eng.modifiedAt)}
+                  </td>
                 </tr>
               );
             })}
 
             {displayedEngagements.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-12 text-center">
+                <td colSpan={9} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center max-w-md mx-auto">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

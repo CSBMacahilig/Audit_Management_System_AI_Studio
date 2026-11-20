@@ -322,6 +322,9 @@ export interface WorkingNote {
   testingProcedure: string;
   conclusion: string;
   reviewerComments?: string;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 export interface AuditFinding {
@@ -338,6 +341,9 @@ export interface AuditFinding {
   targetDate: string;
   status: 'Open' | 'Action plan submitted' | 'In remediation' | 'Validated & Closed';
   linkedNoteRef: string;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 export interface TimelineActivity {
@@ -401,6 +407,9 @@ export interface AuditEngagement {
   reportRating?: string;
   reportRef: string;
   executiveSummary: string;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 const PRIMARY_ENGAGEMENTS: AuditEngagement[] = [
@@ -1396,6 +1405,9 @@ export interface UniverseEntity {
   nextDue: string;
   cycleMonths: number;
   defaultLead: string;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 export const INITIAL_UNIVERSE: UniverseEntity[] = [
@@ -1595,6 +1607,9 @@ export interface UniverseRecord {
   lastAudit: string;
   nextDue: string;
   nextDueStatus: 'Overdue' | 'Due soon' | 'On track';
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 const BASE_UNIVERSE_RECORDS: UniverseRecord[] = [
@@ -2129,6 +2144,9 @@ export interface IssueRegisterItem {
   status: 'Overdue' | 'In progress' | 'Open' | 'Extension requested' | 'For validation' | 'Closed';
   actionPlanSummary: string;
   evidenceNote?: string;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
 }
 
 export const INITIAL_ISSUES_REGISTER: IssueRegisterItem[] = [
