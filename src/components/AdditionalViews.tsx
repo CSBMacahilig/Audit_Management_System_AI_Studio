@@ -764,7 +764,11 @@ export const AuditUniverseView: React.FC<{
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
             {filtered.map((rec, index) => {
-              const identifier = rec.code || formatIdentifier('AU', index + 1);
+              const identifier = normalizeLegacyIdentifier(
+                rec.code || rec.id,
+                'AU',
+                index + 1
+              );
               const cycle =
                 rec.riskLevel === 'High'
                   ? frequencies.high
@@ -779,6 +783,9 @@ export const AuditUniverseView: React.FC<{
                   </td>
                   <td className="py-3.5 pr-4">
                     <div className="font-bold text-slate-900">{rec.name}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-mono-tabular">
+                      {identifier}
+                    </div>
                     <div className="text-xs text-slate-500 mt-0.5">{rec.subtitle}</div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-700">{rec.type}</td>
