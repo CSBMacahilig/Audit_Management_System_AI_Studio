@@ -104,14 +104,14 @@ export default function App() {
   }, []);
 
   const handleLoginSuccess = (session: AuthSession) => {
-    if (session.role !== 'admin') setAccessActive(true);
+    if (session.role !== 'admin') setAccessMode('enforced');
     setAuthSession(session);
   };
 
   const handleLogout = () => {
     logout();
     setAuthSession(null);
-    setAccessActive(true);
+    setAccessMode('enforced');
     setShowAdminPanel(false);
   };
 
@@ -126,7 +126,24 @@ export default function App() {
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrixRow[]>(DEFAULT_ROLE_PERMISSIONS_MATRIX);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [accessActive, setAccessActive] = useState<boolean>(true);
+  const [accessMode, setAccessMode] = useState<'off' | 'simulated' | 'enforced'>(() => {
+    try {
+      const saved = localStorage.getItem('ams_access_control_mode');
+      if (saved === 'off' || saved === 'simulated' || saved === 'enforced') return saved;
+    } catch {
+      // ignore
+    }
+    return 'enforced';
+  });
+  const accessActive = accessMode !== 'off';
+  const setAndPersistAccessMode = (mode: 'off' | 'simulated' | 'enforced') => {
+    setAccessMode(mode);
+    try {
+      localStorage.setItem('ams_access_control_mode', mode);
+    } catch {
+      // ignore
+    }
+  };
   const [dataLoading, setDataLoading] = useState(true);
   const roleSimulationProfiles = userProfiles.length > 0 ? userProfiles : USERS;
 
@@ -778,10 +795,17 @@ export default function App() {
         onChangeUser={setCurrentUser}
         userProfiles={roleSimulationProfiles}
         permissionMatrix={permissionMatrix}
-        canSimulateAccess={authSession.role === 'admin'}
+        canSimulateAccess={authSession.role === 'admin' && accessMode !== 'enforced'}
         accessActive={accessActive}
+        accessMode={accessMode}
+        onChangeAccessMode={(mode) => {
+          if (authSession.role !== 'admin') return;
+          setAndPersistAccessMode(mode);
+        }}
         onToggleAccess={() => {
-          if (authSession.role === 'admin') setAccessActive((prev) => !prev);
+          if (authSession.role === 'admin') {
+            setAndPersistAccessMode(accessMode === 'enforced' ? 'simulated' : 'enforced');
+          }
         }}
         selectedEngagement={activeTab === 'fieldwork' ? selectedEngagement : null}
         onAdvanceEngagementStage={handleAdvanceEngagementStage}
@@ -855,7 +879,7 @@ export default function App() {
                   const nextUser = profiles[(currentIdx + 1) % profiles.length];
                   if (nextUser) setCurrentUser(nextUser);
                 } : undefined}
-                onBypassSimulation={authSession.role === 'admin' ? () => setAccessActive(false) : undefined}
+                onBypassSimulation={authSession.role === 'admin' ? () => setAndPersistAccessMode('off') : undefined}
               />
             );
           }
@@ -933,7 +957,7 @@ export default function App() {
                   onSelectSubTab={handleSelectSubTab}
                   currentUser={currentUser ?? FALLBACK_USER}
                   onChangeUser={setCurrentUser}
-                  canSimulateRole={authSession.role === 'admin'}
+                  canSimulateRole={authSession.role === 'admin' && accessMode !== 'enforced'}
                   userProfiles={roleSimulationProfiles}
                   accessActive={accessActive}
                   onApproveWorkingNote={handleApproveWorkingNote}
@@ -977,7 +1001,9 @@ export default function App() {
                   canSimulateAccess={authSession.role === 'admin'}
                   accessActive={accessActive}
                   onToggleAccess={() => {
-                    if (authSession.role === 'admin') setAccessActive((prev) => !prev);
+                    if (authSession.role === 'admin') {
+                      setAndPersistAccessMode(accessMode === 'enforced' ? 'simulated' : 'enforced');
+                    }
                   }}
                   onSelectTab={handleSelectTab}
                   onAddUserProfile={handleAddUserProfile}

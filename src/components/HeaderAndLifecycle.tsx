@@ -29,7 +29,9 @@ interface HeaderAndLifecycleProps {
   permissionMatrix: RolePermissionMatrixRow[];
   canSimulateAccess: boolean;
   accessActive: boolean;
+  accessMode: 'off' | 'simulated' | 'enforced';
   onToggleAccess: () => void;
+  onChangeAccessMode: (mode: 'off' | 'simulated' | 'enforced') => void;
   selectedEngagement: AuditEngagement | null;
   onAdvanceEngagementStage?: (stageId: LifecycleStageId) => void;
   // Auth
@@ -64,13 +66,17 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
   permissionMatrix,
   canSimulateAccess,
   accessActive,
+  accessMode,
   onToggleAccess,
+  onChangeAccessMode,
   authSession,
   onLogout,
   onOpenAdminPanel,
   onResetSystemForUAT,
 }) => {
   const [showUserMenu, setShowUserMenu] = React.useState(false);
+  const [showAccessModeMenu, setShowAccessModeMenu] = React.useState(false);
+  const [draftAccessMode, setDraftAccessMode] = React.useState(accessMode);
   const [showUatResetModal, setShowUatResetModal] = React.useState(false);
   const [isResetting, setIsResetting] = React.useState(false);
 
@@ -170,17 +176,27 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
           <div className="flex items-center">
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                accessActive
+                accessMode === 'enforced'
                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                  : 'bg-[#F8E7D2] text-[#A64B00]'
+                  : accessMode === 'simulated'
+                  ? 'bg-[#F8E7D2] text-[#A64B00]'
+                  : 'bg-slate-100 text-slate-700 border border-slate-300'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  accessActive ? 'bg-emerald-700' : 'bg-[#D96B12]'
+                  accessMode === 'enforced'
+                    ? 'bg-emerald-700'
+                    : accessMode === 'simulated'
+                    ? 'bg-[#D96B12]'
+                    : 'bg-slate-500'
                 }`}
               />
-              {accessActive ? 'Access enforced' : 'Access simulated'}
+              {accessMode === 'off'
+                ? 'Access off'
+                : accessMode === 'simulated'
+                ? 'Access simulated'
+                : 'Access enforced'}
             </span>
           </div>
 
@@ -212,12 +228,90 @@ export const HeaderAndLifecycle: React.FC<HeaderAndLifecycleProps> = ({
                 <button
                   type="button"
                   onClick={onToggleAccess}
-                  aria-label={`Switch mode from ${accessActive ? 'access enforced' : 'access simulated'}`}
-                  title={`Current mode: ${accessActive ? 'Access enforced' : 'Access simulated'}. Click to switch mode.`}
+                  aria-label={`Switch mode from ${accessMode}`}
+                  title={`Current mode: ${accessMode}. Click to switch mode.`}
                   className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                 >
                   Switch mode
                 </button>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftAccessMode(accessMode);
+                      setShowAccessModeMenu((prev) => !prev);
+                    }}
+                    aria-expanded={showAccessModeMenu}
+                    className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold rounded-md border border-slate-300/90 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Access control mode
+                  </button>
+
+                  {showAccessModeMenu && (
+                    <div className="absolute right-0 mt-1.5 w-[310px] bg-white rounded-lg shadow-lg border border-slate-200 p-4 z-50">
+                      <div className="pb-3 border-b border-slate-200">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          Identity &amp; access
+                        </div>
+                        <div className="mt-1 text-[15px] font-bold text-slate-900">
+                          Access control mode
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 py-3">
+                        {([
+                          {
+                            value: 'off',
+                            label: 'Off',
+                            description: 'No access checks. Everyone can access everything, including setup.',
+                          },
+                          {
+                            value: 'simulated',
+                            label: 'Simulated (testing)',
+                            description: 'Access checks apply only to the selected user for testing. Admins can switch profiles.',
+                          },
+                          {
+                            value: 'enforced',
+                            label: 'Enforced (sign-in)',
+                            description: 'Each signed-in user is limited to their authenticated account role. Profile switching is disabled.',
+                          },
+                        ] as const).map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex items-start gap-2.5 cursor-pointer"
+                          >
+                            <input
+                              type="radio"
+                              name="access-control-mode"
+                              value={option.value}
+                              checked={draftAccessMode === option.value}
+                              onChange={() => setDraftAccessMode(option.value)}
+                              className="mt-0.5 h-4 w-4 accent-[#492785]"
+                            />
+                            <span>
+                              <span className="block text-xs font-bold text-slate-900">{option.label}</span>
+                              <span className="block text-[11px] leading-relaxed text-slate-500 mt-0.5">
+                                {option.description}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onChangeAccessMode(draftAccessMode);
+                          setShowAccessModeMenu(false);
+                        }}
+                        className="w-full px-3 py-2 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md cursor-pointer"
+                      >
+                        Save mode
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <div className="relative">
                   <button
