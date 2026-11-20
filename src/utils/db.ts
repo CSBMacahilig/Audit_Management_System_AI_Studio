@@ -26,6 +26,7 @@ import type {
   UserProfile,
   WorkingNote,
 } from '../data/auditData';
+import { normalizeLegacyIdentifier } from './identifiers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row mappers
@@ -41,7 +42,7 @@ function rowToEngagement(row: any, subs: {
 }): AuditEngagement {
   return {
     id: row.id,
-    ref: row.ref,
+    ref: typeof row.ref === 'string' ? row.ref.replace(/^AUD-/, 'AE-') : row.ref,
     year: row.year,
     title: row.title,
     category: row.category,
@@ -408,7 +409,10 @@ export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
 export async function fetchUniverse(): Promise<UniverseEntity[]> {
   const { data, error } = await supabase.from('universe_entities').select('*').order('code');
   if (error) { console.error('fetchUniverse:', error.message); return []; }
-  return (data ?? []).map(rowToUniverse);
+  return (data ?? []).map((row, index) => rowToUniverse({
+    ...row,
+    code: normalizeLegacyIdentifier(row.code, 'AU', index + 1),
+  }));
 }
 
 export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void> {

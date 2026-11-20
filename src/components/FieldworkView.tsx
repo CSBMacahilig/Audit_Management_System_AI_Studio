@@ -16,6 +16,7 @@ import {
 } from '../utils/security';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay, toDateInputValue } from '../utils/date';
+import { formatIdentifier } from '../utils/identifiers';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const DEFAULT_REPORT_RATINGS = ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'];
@@ -543,8 +544,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
     if (!safeTitle) return;
     const nextIdx = eng.findings.length + 1;
     const newFinding: AuditFinding = {
-      id: `fnd-${Date.now()}`,
-      ref: `${eng.ref.replace('AUD-', 'FND-')}-0${nextIdx}`,
+      id: formatIdentifier('FN', nextIdx).toLowerCase(),
+      ref: formatIdentifier('FN', nextIdx),
       title: safeTitle,
       severity: fndSeverity,
       condition: sanitizeMultiline(fndCondition, 800) || 'Control exception observed during sample testing.',
@@ -579,7 +580,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
     }
     setSecurityBanner(null);
     const createdFile: AuditFile = {
-      id: `fl-${Date.now()}`,
+      id: formatIdentifier('AF', eng.files.length + 1).toLowerCase(),
       name: check.sanitizedName,
       folder: uploadFolder,
       size: `${uploadSizeKB} KB`,

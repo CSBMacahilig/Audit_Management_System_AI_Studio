@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatIdentifier, nextIdentifierSequence } from '../utils/identifiers';
 import { fetchMasterData, saveMasterData } from '../utils/db';
 import {
   AuditEngagement,
@@ -567,6 +568,11 @@ export const AuditUniverseView: React.FC<{
   const handleAddEntity = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+    const nextSequence = nextIdentifierSequence(
+      records.map((record) => ({ id: record.id })),
+      'AU'
+    );
+    const identifier = formatIdentifier('AU', nextSequence);
     const score = Number(newRiskScore) || (newLikelihood * newImpact);
     const riskLevel: AuditRiskLevel = calculateRiskLevel(score);
     const cycleMonths = getCycleMonths(riskLevel);
@@ -574,7 +580,7 @@ export const AuditUniverseView: React.FC<{
     const nextDue = computeNextDueDate(newLastAudit, cycleMonths);
 
     const added: UniverseRecord = {
-      id: `ur-${Date.now()}`,
+      id: identifier.toLowerCase(),
       name: newName.trim(),
       subtitle: newSubtitle.trim(),
       type: newType,
@@ -593,7 +599,7 @@ export const AuditUniverseView: React.FC<{
     if (onAddUniverseEntity) {
       onAddUniverseEntity({
         id: added.id,
-        code: `UNV-${Date.now().toString().slice(-4)}`,
+        code: identifier,
         name: added.name,
         division: added.subtitle,
         category: added.type,
@@ -3182,7 +3188,7 @@ export const MasterDataSetupAccessView: React.FC<{
     const item: AuditeeUnitRecord = {
       id:
         existing?.id ||
-        `auditee-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        formatIdentifier('AD', auditeeDirectory.length + 1).toLowerCase(),
       unit: auditeeFormUnit.trim(),
       head: auditeeFormHead.trim(),
       title: auditeeFormTitle.trim() || 'Unit Head',
@@ -3446,7 +3452,7 @@ export const MasterDataSetupAccessView: React.FC<{
       }
     }
     const newAcc = {
-      id: `acc-${Date.now()}`,
+      id: formatIdentifier('IA', accessUsers.length + 1).toLowerCase(),
       name: newUserName.trim(),
       title: `${newUserRole} · Internal Audit`,
       email: newUserEmail.trim(),

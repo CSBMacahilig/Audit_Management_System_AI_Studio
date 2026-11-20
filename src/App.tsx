@@ -67,6 +67,7 @@ import {
 } from './utils/db';
 import { SizingConfig } from './data/auditData';
 import { canTransitionEngagementStatus, EngagementStatus } from './utils/brw';
+import { formatIdentifier, formatYearIdentifier } from './utils/identifiers';
 
 // Fallback profile used when user_profiles table is empty (fresh database)
 const FALLBACK_USER: UserProfile = {
@@ -348,7 +349,7 @@ export default function App() {
             ? 'Closed'
             : 'Reporting';
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:10',
           actor: currentUser?.name ?? '',
           action: `Engagement lifecycle advanced to Stage 0${nextStage}`,
@@ -391,7 +392,7 @@ export default function App() {
         if (updatedNote) upsertWorkingNote(engagementId, updatedNote);
 
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:15',
           actor: currentUser?.name ?? '',
           action: `${noteObj?.ref || 'Working note'} marked as ${newStatus}`,
@@ -424,7 +425,7 @@ export default function App() {
         if (updatedActivity) upsertTimelineActivity(engagementId, updatedActivity);
 
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:18',
           actor: currentUser?.name ?? '',
           action: `Timeline activity completed: ${actObj?.name || ''}`,
@@ -452,9 +453,9 @@ export default function App() {
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const nextNum = eng.workingNotes.length + 1;
-        const ref = `WN-00${nextNum}`;
+        const ref = formatIdentifier('WP', nextNum);
         const newNote: WorkingNote = {
-          id: `wn-${Date.now()}`,
+          id: ref.toLowerCase(),
           ref,
           title,
           controlArea,
@@ -470,7 +471,7 @@ export default function App() {
         upsertWorkingNote(engagementId, newNote);
 
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:20',
           actor: currentUser?.name ?? '',
           action: `${ref} (${title}) created and submitted for review`,
@@ -499,7 +500,7 @@ export default function App() {
         if (updatedFinding) upsertFinding(engagementId, updatedFinding);
 
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:25',
           actor: currentUser?.name ?? '',
           action: `Finding ${fnd?.ref || ''} evidence validated & closed`,
@@ -523,7 +524,7 @@ export default function App() {
         if (eng.id !== engagementId) return eng;
         upsertFinding(engagementId, finding);
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:28',
           actor: currentUser?.name ?? '',
           action: `Finding ${finding.ref} (${finding.title}) drafted`,
@@ -566,7 +567,7 @@ export default function App() {
         if (updatedFinding) upsertFinding(engagementId, updatedFinding);
 
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: '4 Oct 2026, 14:30',
           actor: currentUser?.name ?? '',
           action: `${target?.ref || 'Finding'} action plan updated (${newStatus})`,
@@ -590,7 +591,7 @@ export default function App() {
         if (eng.id !== engagementId) return eng;
         insertFile(engagementId, file);
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: file.uploadedAt,
           actor: currentUser?.name ?? '',
           action: 'File uploaded',
@@ -618,7 +619,7 @@ export default function App() {
       prev.map((eng) => {
         if (eng.id !== engagementId) return eng;
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: new Date().toLocaleString('en-GB'),
           actor: currentUser?.name ?? '',
           action: reportRating !== undefined && reportRating !== eng.reportRating && newStatus === eng.reportStatus
@@ -651,7 +652,7 @@ export default function App() {
           return eng;
         }
         const logEntry = {
-          id: `act-${Date.now()}`,
+          id: formatIdentifier('AL', eng.activityLog.length + 1).toLowerCase(),
           timestamp: new Date().toLocaleString('en-GB'),
           actor: currentUser?.name ?? '',
           action: `${eng.ref} audit status changed to ${status}`,
@@ -684,8 +685,8 @@ export default function App() {
     const exists = engagements.some((e) => e.ref === 'AUD-2026-011');
     if (exists) return;
     const drafted: AuditEngagement = {
-      id: `aud-${Date.now()}`,
-      ref: 'AUD-2026-011',
+      id: formatYearIdentifier('AE', 2026, 11).toLowerCase(),
+      ref: formatYearIdentifier('AE', 2026, 11),
       year: 2026,
       title: 'Fixed Assets & Head Office Procurement Audit',
       category: 'Operations',

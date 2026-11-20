@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatYearIdentifier } from '../utils/identifiers';
 import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay } from '../utils/date';
@@ -154,10 +155,10 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     const riskLevel: AuditRiskLevel =
       score >= 7 ? 'High' : score >= 4 ? 'Medium' : 'Low';
     const nextNum = engagements.length + 1;
-    const ref = `AUD-${selectedYear}-0${nextNum < 10 ? '0' + nextNum : nextNum}`;
+    const ref = formatYearIdentifier('AE', Number(selectedYear), nextNum);
 
     const created: AuditEngagement = {
-      id: `aud-${Date.now()}`,
+      id: ref.toLowerCase(),
       ref,
       year: Number(selectedYear),
       title: newTitle.trim(),
@@ -190,7 +191,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       files: [],
       activityLog: [
         {
-          id: `act-${Date.now()}`,
+          id: `AL-${Date.now().toString().slice(-4).padStart(4, '0')}`,
           timestamp: '4 Oct 2026, 09:15',
           actor: 'M. Santos',
           action: `${ref} added to Annual Audit Plan ${selectedYear}`,
