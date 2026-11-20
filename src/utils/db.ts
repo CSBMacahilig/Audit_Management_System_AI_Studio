@@ -26,7 +26,10 @@ import type {
   UserProfile,
   WorkingNote,
 } from '../data/auditData';
-import { normalizeLegacyIdentifier } from './identifiers';
+import {
+  normalizeLegacyIdentifier,
+  normalizeYearIdentifier,
+} from './identifiers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row mappers
@@ -42,7 +45,7 @@ function rowToEngagement(row: any, subs: {
 }): AuditEngagement {
   return {
     id: row.id,
-    ref: typeof row.ref === 'string' ? row.ref.replace(/^AUD-/, 'AE-') : row.ref,
+    ref: normalizeYearIdentifier(row.ref, 'AE', row.year, 1),
     year: row.year,
     title: row.title,
     category: row.category,
@@ -77,7 +80,7 @@ function rowToEngagement(row: any, subs: {
 function rowToWorkingNote(row: any): WorkingNote {
   return {
     id: row.id,
-    ref: row.ref,
+    ref: normalizeLegacyIdentifier(row.ref, 'WP', 1),
     title: row.title,
     controlArea: row.control_area,
     author: row.author,
@@ -94,7 +97,7 @@ function rowToWorkingNote(row: any): WorkingNote {
 function rowToFinding(row: any): AuditFinding {
   return {
     id: row.id,
-    ref: row.ref,
+    ref: normalizeLegacyIdentifier(row.ref, 'FN', 1),
     title: row.title,
     severity: row.severity,
     condition: row.condition,
@@ -112,7 +115,7 @@ function rowToFinding(row: any): AuditFinding {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToTimeline(row: any): TimelineActivity {
   return {
-    id: row.id,
+    id: normalizeLegacyIdentifier(row.id, 'AL', 1),
     name: row.name,
     roleResponsible: row.role_responsible,
     dueDate: row.due_date,
@@ -125,7 +128,7 @@ function rowToTimeline(row: any): TimelineActivity {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToFile(row: any): AuditFile {
   return {
-    id: row.id,
+    id: normalizeLegacyIdentifier(row.id, 'AF', 1),
     name: row.name,
     folder: row.folder,
     size: row.size,
@@ -137,7 +140,7 @@ function rowToFile(row: any): AuditFile {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToActivityLog(row: any): ActivityLogItem {
   return {
-    id: row.id,
+    id: normalizeLegacyIdentifier(row.id, 'AL', 1),
     timestamp: row.timestamp,
     actor: row.actor,
     action: row.action,
@@ -148,8 +151,8 @@ function rowToActivityLog(row: any): ActivityLogItem {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToIssue(row: any): IssueRegisterItem {
   return {
-    id: row.id,
-    ref: row.ref,
+    id: normalizeLegacyIdentifier(row.id, 'IS', 1),
+    ref: normalizeLegacyIdentifier(row.ref, 'IS', 1),
     title: row.title,
     auditRef: row.audit_ref,
     auditTitle: row.audit_title,
@@ -171,8 +174,8 @@ function rowToIssue(row: any): IssueRegisterItem {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToUniverse(row: any): UniverseEntity {
   return {
-    id: row.id,
-    code: row.code,
+    id: normalizeLegacyIdentifier(row.id, 'AU', 1),
+    code: normalizeLegacyIdentifier(row.code, 'AU', 1),
     name: row.name,
     division: row.division,
     category: row.category,
@@ -205,7 +208,7 @@ function rowToSizing(row: any): SizingConfig {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToUserProfile(row: any): UserProfile {
   return {
-    id: row.id,
+    id: normalizeLegacyIdentifier(row.id, 'IA', 1),
     name: row.name,
     roleTitle: row.role_title,
     fullLabel: row.full_label,

@@ -903,6 +903,7 @@ export default function App() {
                   universe={universe}
                   universeRecords={universe.map((u) => ({
                     id: u.id,
+                    code: u.code,
                     name: u.name,
                     subtitle: u.division || u.category,
                     type: (u.category as UniverseRecord['type']) || 'Process',

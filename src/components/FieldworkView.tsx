@@ -16,7 +16,7 @@ import {
 } from '../utils/security';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay, toDateInputValue } from '../utils/date';
-import { formatIdentifier } from '../utils/identifiers';
+import { formatIdentifier, normalizeLegacyIdentifier } from '../utils/identifiers';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
 const DEFAULT_REPORT_RATINGS = ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'];
@@ -868,14 +868,14 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
               <h3 className="text-[16px] font-bold text-slate-900">Needs attention</h3>
 
               <div className="mt-4 divide-y divide-slate-200/80">
-                {pendingReviewNotes.map((wn) => (
+                {pendingReviewNotes.map((wn, index) => (
                   <div
                     key={wn.id}
                     className="py-3.5 first:pt-0 flex items-center justify-between gap-3"
                   >
                     <div>
                       <div className="text-[13px] font-medium text-slate-900">
-                        <span className="font-mono-tabular">{wn.ref}</span> {wn.title}
+                        <span className="font-mono-tabular">{normalizeLegacyIdentifier(wn.ref, 'WP', index + 1)}</span> {wn.title}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         {wn.status === 'For head review'

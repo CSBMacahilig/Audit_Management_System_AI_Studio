@@ -51,3 +51,17 @@ export function normalizeLegacyIdentifier(
   const lastNumber = value.match(/(\d+)/g)?.at(-1);
   return formatIdentifier(prefix, lastNumber ? Number(lastNumber) : fallbackSequence);
 }
+
+export function normalizeYearIdentifier(
+  value: string | undefined,
+  prefix: 'AE',
+  year: number,
+  fallbackSequence: number
+): string {
+  if (!value) return formatYearIdentifier(prefix, year, fallbackSequence);
+  if (/^AE-\d{4}-\d{3}$/.test(value)) return value;
+  const numbers = value.match(/(\d+)/g);
+  if (!numbers) return formatYearIdentifier(prefix, year, fallbackSequence);
+  const sequence = numbers.length > 1 ? Number(numbers[numbers.length - 1]) : fallbackSequence;
+  return formatYearIdentifier(prefix, year, sequence);
+}

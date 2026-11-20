@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { formatYearIdentifier } from '../utils/identifiers';
+import { formatYearIdentifier, normalizeYearIdentifier } from '../utils/identifiers';
 import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay } from '../utils/date';
@@ -329,7 +329,8 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px]">
-            {displayedEngagements.map((eng) => {
+            {displayedEngagements.map((eng, index) => {
+              const identifier = normalizeYearIdentifier(eng.ref, 'AE', eng.year, index + 1);
               return (
                 <tr
                   key={eng.id || eng.ref}
@@ -337,7 +338,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   className="hover:bg-purple-50/40 transition-colors cursor-pointer group"
                 >
                   <td className="py-3.5 pr-4 align-top font-mono-tabular text-xs font-medium text-slate-800 whitespace-nowrap">
-                    {eng.ref}
+                    {identifier}
                   </td>
                   <td className="py-3.5 px-4 align-top">
                     <div className="font-bold text-slate-900 group-hover:text-[#492785] transition-colors">

@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { formatIdentifier, nextIdentifierSequence } from '../utils/identifiers';
+import {
+  formatIdentifier,
+  nextIdentifierSequence,
+  normalizeLegacyIdentifier,
+} from '../utils/identifiers';
 import { fetchMasterData, saveMasterData } from '../utils/db';
 import {
   AuditEngagement,
@@ -581,6 +585,7 @@ export const AuditUniverseView: React.FC<{
 
     const added: UniverseRecord = {
       id: identifier.toLowerCase(),
+      code: identifier,
       name: newName.trim(),
       subtitle: newSubtitle.trim(),
       type: newType,
@@ -633,6 +638,7 @@ export const AuditUniverseView: React.FC<{
 
     const updated: UniverseRecord = {
       ...editingRecord,
+      code: editingRecord.code,
       name: editName.trim(),
       subtitle: editSubtitle.trim(),
       type: editType,
@@ -653,7 +659,7 @@ export const AuditUniverseView: React.FC<{
       const currentEntity = universe.find((entity) => entity.id === updated.id);
       onUpdateUniverseEntity({
         id: updated.id,
-        code: currentEntity?.code || `UNV-${updated.id.slice(-4)}`,
+        code: updated.code || currentEntity?.code || formatIdentifier('AU', 1),
         name: updated.name,
         division: updated.subtitle,
         category: updated.type,
@@ -744,6 +750,7 @@ export const AuditUniverseView: React.FC<{
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              <th className="py-2.5 pr-4">ID</th>
               <th className="py-2.5 pr-4">ENTITY</th>
               <th className="py-2.5 px-4">TYPE</th>
               <th className="py-2.5 px-4">OWNER</th>
@@ -756,7 +763,8 @@ export const AuditUniverseView: React.FC<{
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
-            {filtered.map((rec) => {
+            {filtered.map((rec, index) => {
+              const identifier = rec.code || formatIdentifier('AU', index + 1);
               const cycle =
                 rec.riskLevel === 'High'
                   ? frequencies.high
@@ -766,6 +774,9 @@ export const AuditUniverseView: React.FC<{
 
               return (
                 <tr key={rec.id} className="hover:bg-slate-50/70 transition-colors">
+                  <td className="py-3.5 pr-4 font-mono-tabular text-xs font-semibold text-slate-800 whitespace-nowrap">
+                    {identifier}
+                  </td>
                   <td className="py-3.5 pr-4">
                     <div className="font-bold text-slate-900">{rec.name}</div>
                     <div className="text-xs text-slate-500 mt-0.5">{rec.subtitle}</div>
@@ -1644,10 +1655,10 @@ export const IssuesView: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
-              {displayed.map((iss) => (
+              {displayed.map((iss, index) => (
                 <tr key={iss.id} className="hover:bg-teal-50/30 transition-colors">
                   <td className="py-3.5 pr-4 align-top font-mono-tabular text-xs font-semibold text-slate-800 whitespace-nowrap">
-                    {iss.ref}
+                    {normalizeLegacyIdentifier(iss.ref, 'IS', index + 1)}
                   </td>
                   <td className="py-3.5 px-4 align-top">
                     <div className="font-bold text-slate-900 leading-snug">
@@ -4842,6 +4853,7 @@ export const MasterDataSetupAccessView: React.FC<{
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="py-2.5 pr-3">ID</th>
                 <th className="py-2.5 pr-3">USER / EMP NO.</th>
                 <th className="py-2.5 px-3">EMAIL</th>
                 <th className="py-2.5 px-3">ROLES</th>
@@ -4854,7 +4866,7 @@ export const MasterDataSetupAccessView: React.FC<{
             <tbody className="divide-y divide-slate-200/80 text-[12px]">
               {accessUsers
                 .filter(matchesAccessUserFilters)
-                .map((usr) => {
+                .map((usr, index) => {
                 const isLocked = (usr as any).isLocked || false;
                 const failedCount = (usr as any).failedLoginCount || 0;
                 const requiresPwChange = (usr as any).requiresPasswordChange || false;
@@ -4867,6 +4879,9 @@ export const MasterDataSetupAccessView: React.FC<{
                 const expiryState = getUserExpiryState(usr);
                 return (
                   <tr key={usr.id} className={`transition-colors ${isLocked ? 'bg-red-50/40' : 'hover:bg-slate-50/40'}`}>
+                    <td className="py-3 pr-3 font-mono-tabular text-[11px] font-semibold text-slate-700 whitespace-nowrap">
+                      {normalizeLegacyIdentifier(usr.id, 'IA', index + 1)}
+                    </td>
                     <td className="py-3 pr-3">
                       <div className="font-bold text-slate-900">{usr.name}</div>
                       <div className="text-[11px] text-slate-500 mt-0.5">{usr.title}</div>
