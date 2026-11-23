@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   DEFAULT_SECURITY_POLICY,
   SecurityPolicy,
@@ -10,6 +10,7 @@ import {
 import { AuditDivisionRiskScale, SizingConfig } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
 import { DEFAULT_AUDIT_DIVISION_RISK_SCALES } from '../utils/riskScale';
+import { formatAuditDate } from '../utils/auditMetadata';
 
 const DEFAULT_SIGNATORY_OPTIONS = [
   'M. Santos – Chief Audit Executive',
@@ -114,6 +115,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   );
   const [newDivisionName, setNewDivisionName] = useState('');
   const [isSavingScales, setIsSavingScales] = useState(false);
+  const [scaleFeedback, setScaleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const scaleEditorRef = useRef<HTMLDivElement | null>(null);
+  const scaleNameInputRef = useRef<HTMLInputElement | null>(null);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -241,12 +245,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setSavedNotice(null), 3500);
   };
 
+  const notifyScale = (type: 'success' | 'error', msg: string) => {
+    setScaleFeedback({ type, message: msg });
+    notify(msg);
+  };
+
   useEffect(() => {
     setDivisionScales(auditDivisionRiskScales);
-    if (!auditDivisionRiskScales.some((scale) => scale.id === selectedDivisionId)) {
-      setSelectedDivisionId(auditDivisionRiskScales[0]?.id ?? '');
-    }
-  }, [auditDivisionRiskScales, selectedDivisionId]);
+    setSelectedDivisionId((current) =>
+      auditDivisionRiskScales.some((scale) => scale.id === current)
+        ? current
+        : auditDivisionRiskScales[0]?.id ?? ''
+    );
+  }, [auditDivisionRiskScales]);
 
   useEffect(() => {
     const selected = divisionScales.find((scale) => scale.id === selectedDivisionId);
@@ -257,47 +268,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     key: K,
     value: AuditDivisionRiskScale[K]
   ) => {
+    setScaleFeedback(null);
     setDivisionDraft((current) => current ? { ...current, [key]: value } : current);
   };
 
-  const handleAddAuditDivision = () => {
+  const handleAddAuditDivision = async () => {
     const name = newDivisionName.trim();
-    if (!name) return;
+    if (!name) {
+      notifyScale('error', 'Enter a division name before clicking Add division.');
+      return;
+    }
     if (divisionScales.some((scale) => scale.name.toLowerCase() === name.toLowerCase())) {
-      notify(`An audit division named "${name}" already exists.`);
+      notifyScale('error', `An audit division named "${name}" already exists.`);
       return;
     }
     const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
-    const added = {
+    const added: AuditDivisionRiskScale = {
       ...DEFAULT_AUDIT_DIVISION_RISK_SCALES[0],
       id,
       name,
     };
-    setDivisionScales((current) => [...current, added]);
+    const next = [...divisionScales, added];
+    setDivisionScales(next);
     setSelectedDivisionId(id);
     setDivisionDraft(added);
     setNewDivisionName('');
+    setIsSavingScales(true);
+    try {
+      await onSaveAuditDivisionRiskScales(next);
+      notifyScale('success', `Added "${name}". Adjust its thresholds below and click Save division scale to update.`);
+    } catch (error) {
+      notifyScale('error', error instanceof Error ? error.message : 'Unable to save new audit division.');
+    } finally {
+      setIsSavingScales(false);
+    }
   };
 
   const handleSaveAuditDivisionScales = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!divisionDraft) return;
     if (!divisionDraft.name.trim()) {
-      notify('Enter an audit division name.');
+      notifyScale('error', 'Enter an audit division name.');
       return;
     }
     if (divisionScales.some((scale) =>
       scale.id !== divisionDraft.id && scale.name.toLowerCase() === divisionDraft.name.trim().toLowerCase()
     )) {
-      notify(`An audit division named "${divisionDraft.name}" already exists.`);
+      notifyScale('error', `An audit division named "${divisionDraft.name}" already exists.`);
       return;
     }
     if (
+      !Number.isFinite(divisionDraft.mediumMinScore) ||
+      !Number.isFinite(divisionDraft.highMinScore) ||
       divisionDraft.mediumMinScore < 0 ||
       divisionDraft.highMinScore <= divisionDraft.mediumMinScore ||
       divisionDraft.highMinScore > 10
     ) {
-      notify('Score bands must be ordered: 0 ≤ Medium minimum < High minimum ≤ 10.');
+      notifyScale('error', 'Score bands must be ordered: 0 ≤ Medium minimum < High minimum ≤ 10.');
       return;
     }
     const positiveValues = [
@@ -314,7 +341,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       [divisionDraft.highFieldworkWeeks, divisionDraft.mediumFieldworkWeeks, divisionDraft.lowFieldworkWeeks]
         .some((value) => value > 52)
     ) {
-      notify('Audit cycles must be 1–60 months and fieldwork durations 1–52 weeks.');
+      notifyScale('error', 'Audit cycles must be 1–60 months and fieldwork durations 1–52 weeks.');
       return;
     }
     const next = divisionScales.map((scale) =>
@@ -326,35 +353,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       await onSaveAuditDivisionRiskScales(next);
       setDivisionScales(next);
-      notify(`Risk scale saved for ${divisionDraft.name.trim()}.`);
+      notifyScale('success', `Risk scale saved for ${divisionDraft.name.trim()}.`);
     } catch (error) {
       console.error('Unable to save audit division risk scales:', error);
-      notify(error instanceof Error ? error.message : 'Unable to save audit division risk scales.');
+      notifyScale('error', error instanceof Error ? error.message : 'Unable to save audit division risk scales.');
     } finally {
       setIsSavingScales(false);
     }
   };
 
-  const handleRemoveAuditDivision = async () => {
-    if (!divisionDraft) return;
+  const handleEditSavedDivision = (scale: AuditDivisionRiskScale) => {
+    setScaleFeedback(null);
+    setSelectedDivisionId(scale.id);
+    setDivisionDraft({ ...scale });
+    scaleEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => scaleNameInputRef.current?.focus(), 150);
+  };
+
+  const handleRemoveAuditDivision = async (target: AuditDivisionRiskScale | null = divisionDraft) => {
+    if (!target) return;
     if (divisionScales.length <= 1) {
-      notify('At least one audit division must remain configured.');
+      notifyScale('error', 'At least one audit division must remain configured.');
       return;
     }
-    if (assignedAuditDivisionIds.includes(divisionDraft.id)) {
-      notify('This division is assigned to an Audit Universe entity or engagement and cannot be removed.');
+    if (assignedAuditDivisionIds.includes(target.id)) {
+      notifyScale('error', 'This division is assigned to an Audit Universe entity or engagement and cannot be removed.');
       return;
     }
-    const next = divisionScales.filter((scale) => scale.id !== divisionDraft.id);
+    const next = divisionScales.filter((scale) => scale.id !== target.id);
     setIsSavingScales(true);
     try {
       await onSaveAuditDivisionRiskScales(next);
       setDivisionScales(next);
-      setSelectedDivisionId(next[0].id);
-      notify(`Audit division "${divisionDraft.name}" removed.`);
+      if (selectedDivisionId === target.id) {
+        setSelectedDivisionId(next[0].id);
+      }
+      notifyScale('success', `Audit division "${target.name}" removed.`);
     } catch (error) {
       console.error('Unable to remove audit division:', error);
-      notify(error instanceof Error ? error.message : 'Unable to remove audit division.');
+      notifyScale('error', error instanceof Error ? error.message : 'Unable to remove audit division.');
     } finally {
       setIsSavingScales(false);
     }
@@ -446,7 +483,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* Right Card: Per-division risk rating scale */}
-        <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
+        <div ref={scaleEditorRef} className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
           <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
             Risk rating scale by audit division
           </h2>
@@ -462,7 +499,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </label>
                 <select
                   value={selectedDivisionId}
-                  onChange={(event) => setSelectedDivisionId(event.target.value)}
+                  onChange={(event) => {
+                    setScaleFeedback(null);
+                    setSelectedDivisionId(event.target.value);
+                  }}
                   className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 focus:outline-none focus:border-[#492785]"
                 >
                   {divisionScales.map((scale) => (
@@ -490,7 +530,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleRemoveAuditDivision}
+                onClick={() => handleRemoveAuditDivision()}
                 disabled={!divisionDraft || assignedAuditDivisionIds.includes(divisionDraft.id) || divisionScales.length <= 1 || isSavingScales}
                 className="px-3.5 py-2.5 bg-white hover:bg-rose-50 text-rose-700 text-xs font-semibold rounded-md border border-rose-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
@@ -505,6 +545,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     Division name
                   </label>
                   <input
+                    ref={scaleNameInputRef}
                     value={divisionDraft.name}
                     onChange={(event) => updateDivisionDraft('name', event.target.value)}
                     required
@@ -520,8 +561,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <input
                       type="number"
                       min={0}
-                      max={9.9}
-                      step={0.1}
+                      max={9.99}
+                      step="any"
                       value={divisionDraft.mediumMinScore}
                       onChange={(event) => updateDivisionDraft('mediumMinScore', Number(event.target.value))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
@@ -533,9 +574,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </label>
                     <input
                       type="number"
-                      min={0.1}
+                      min={0.01}
                       max={10}
-                      step={0.1}
+                      step="any"
                       value={divisionDraft.highMinScore}
                       onChange={(event) => updateDivisionDraft('highMinScore', Number(event.target.value))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
@@ -605,6 +646,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </tbody>
                   </table>
                 </div>
+                {scaleFeedback && (
+                  <div
+                    className={`px-3 py-2 rounded-md border text-xs font-medium ${
+                      scaleFeedback.type === 'error'
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    }`}
+                  >
+                    {scaleFeedback.message}
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={isSavingScales}
@@ -617,6 +669,122 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <p className="text-xs text-slate-500">Add an audit division to configure its risk scale.</p>
             )}
           </form>
+        </div>
+      </div>
+
+      {/* Saved Audit Division Risk Scales Table */}
+      <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
+              Saved audit division risk scales
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Persisted risk thresholds, audit cycles, and fieldwork durations per division. Click Edit to load a division into the editor above.
+            </p>
+          </div>
+          <span className="text-xs font-medium text-slate-500 tabular-nums">
+            {auditDivisionRiskScales.length} {auditDivisionRiskScales.length === 1 ? 'division' : 'divisions'} saved
+          </span>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="py-2.5 pr-4">AUDIT DIVISION</th>
+                <th className="py-2.5 px-4">HIGH</th>
+                <th className="py-2.5 px-4">MEDIUM</th>
+                <th className="py-2.5 px-4">LOW</th>
+                <th className="py-2.5 px-4">LAST SAVED</th>
+                <th className="py-2.5 pl-4 text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200/80 text-xs tabular-nums">
+              {auditDivisionRiskScales.map((scale) => {
+                const isSelected = scale.id === selectedDivisionId;
+                const isAssigned = assignedAuditDivisionIds.includes(scale.id);
+                return (
+                  <tr
+                    key={scale.id}
+                    className={isSelected ? 'bg-purple-50/50' : 'hover:bg-slate-50/70 transition-colors'}
+                  >
+                    <td className="py-3 pr-4">
+                      <div className="font-semibold text-slate-900">{scale.name}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        {isSelected ? 'Currently in editor' : isAssigned ? 'Assigned to records' : 'Unassigned'}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-[#B8500B]">{scale.highMinScore}–10</div>
+                      <div className="text-[11px] text-slate-600 mt-0.5">
+                        {scale.highCycleMonths}m cycle · {scale.highFieldworkWeeks}w fieldwork
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-[#9A7615]">
+                        {scale.mediumMinScore}–&lt;{scale.highMinScore}
+                      </div>
+                      <div className="text-[11px] text-slate-600 mt-0.5">
+                        {scale.mediumCycleMonths}m cycle · {scale.mediumFieldworkWeeks}w fieldwork
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-emerald-700">&lt;{scale.mediumMinScore}</div>
+                      <div className="text-[11px] text-slate-600 mt-0.5">
+                        {scale.lowCycleMonths}m cycle · {scale.lowFieldworkWeeks}w fieldwork
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-600">
+                      {scale.modifiedAt ? (
+                        <>
+                          <div>{formatAuditDate(scale.modifiedAt)}</div>
+                          {scale.modifiedBy && (
+                            <div className="text-[11px] text-slate-500 mt-0.5">{scale.modifiedBy}</div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">Baseline default</span>
+                      )}
+                    </td>
+                    <td className="py-3 pl-4 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleEditSavedDivision(scale)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-medium cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAuditDivision(scale)}
+                          disabled={isAssigned || auditDivisionRiskScales.length <= 1 || isSavingScales}
+                          title={
+                            isAssigned
+                              ? 'Cannot remove a division assigned to Universe entities or engagements'
+                              : auditDivisionRiskScales.length <= 1
+                              ? 'At least one audit division must remain configured'
+                              : `Remove ${scale.name}`
+                          }
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {auditDivisionRiskScales.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
+                    No audit division risk scales saved yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
