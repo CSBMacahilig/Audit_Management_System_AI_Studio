@@ -35,11 +35,18 @@ export interface RolePermissionMatrixRow {
   auditee?: string;
 }
 
-export const DEFAULT_ROLE_DEFINITIONS: AppRoleDefinition[] = APP_ROLES.map((name) => ({
-  name,
-  accessRole: name,
-  builtIn: true,
-}));
+export const DEFAULT_ROLE_DEFINITIONS: AppRoleDefinition[] = [
+  ...APP_ROLES.map((name) => ({
+    name,
+    accessRole: name,
+    builtIn: true,
+  })),
+  {
+    name: 'Supervising Auditor',
+    accessRole: 'Audit Supervisor',
+    builtIn: true,
+  },
+];
 
 export function normalizeRole(raw?: string): AppRole {
   if (!raw) return 'Assisting Auditor';

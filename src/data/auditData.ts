@@ -1597,7 +1597,7 @@ export interface UniverseRecord {
   code?: string;
   name: string;
   subtitle: string;
-  type: 'Process' | 'IT system' | 'Branch' | 'Department' | 'Product / process' | 'Vendor';
+  type: string;
   owner: string;
   likelihood: number;
   impact: number;

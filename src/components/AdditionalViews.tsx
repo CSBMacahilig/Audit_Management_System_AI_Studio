@@ -462,7 +462,10 @@ export const AuditUniverseView: React.FC<{
 
   React.useEffect(() => {
     fetchMasterData('entity_types', DEFAULT_ENTITY_TYPES).then((types) => {
-      if (types && types.length > 0) setDynamicEntityTypes(types);
+      if (types && types.length > 0) {
+        setDynamicEntityTypes(types);
+        setNewType((current) => types.includes(current) ? current : types[0]);
+      }
     });
     fetchMasterData('audit_categories', DEFAULT_AUDIT_CATEGORIES).then((cats) => {
       if (cats && cats.length > 0) {
@@ -490,8 +493,10 @@ export const AuditUniverseView: React.FC<{
   // Add entity form
   const [newName, setNewName] = useState('');
   const [newSubtitle, setNewSubtitle] = useState('Operations');
-  const [newType, setNewType] = useState<UniverseRecord['type']>('Process');
-  const [newOwner, setNewOwner] = useState('R. Bautista');
+  const [newType, setNewType] = useState<UniverseRecord['type']>(DEFAULT_ENTITY_TYPES[0]);
+  const [newOwner, setNewOwner] = useState(
+    `${DEFAULT_AUDITEE_DIRECTORY[0].head} (${DEFAULT_AUDITEE_DIRECTORY[0].unit})`
+  );
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(4);
   const [newRiskScore, setNewRiskScore] = useState(16);
@@ -1154,6 +1159,9 @@ export const AuditUniverseView: React.FC<{
                   onChange={(e) => setEditSubtitle(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                 >
+                  {editSubtitle && !dynamicCategories.includes(editSubtitle) && (
+                    <option value={editSubtitle}>{editSubtitle}</option>
+                  )}
                   {dynamicCategories.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
@@ -1172,6 +1180,9 @@ export const AuditUniverseView: React.FC<{
                     }
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   >
+                    {editType && !dynamicEntityTypes.includes(editType) && (
+                      <option value={editType}>{editType}</option>
+                    )}
                     {dynamicEntityTypes.map((et) => (
                       <option key={et} value={et}>{et}</option>
                     ))}
@@ -1186,6 +1197,9 @@ export const AuditUniverseView: React.FC<{
                     onChange={(e) => setEditOwner(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                   >
+                    {editOwner && !dynamicOwners.some((owner) => `${owner.head} (${owner.unit})` === editOwner) && (
+                      <option value={editOwner}>{editOwner}</option>
+                    )}
                     {dynamicOwners.map((owner, idx) => (
                       <option key={owner.id || `${owner.head}-${owner.unit}-${idx}`} value={`${owner.head} (${owner.unit})`}>
                         {owner.head} — {owner.unit}
@@ -2700,6 +2714,8 @@ export const MasterDataSetupAccessView: React.FC<{
   onDeleteUserProfile?: (id: string) => void;
   onResetSystemForUAT?: () => Promise<void> | void;
   onRolePermissionMatrixChange?: (rows: MatrixRow[]) => void;
+  universe?: UniverseEntity[];
+  onUpdateUniverseEntity?: (entity: UniverseEntity) => void;
 }> = ({
   tab,
   currentUser,
@@ -2714,6 +2730,8 @@ export const MasterDataSetupAccessView: React.FC<{
   onDeleteUserProfile,
   onResetSystemForUAT,
   onRolePermissionMatrixChange,
+  universe = [],
+  onUpdateUniverseEntity,
 }) => {
   const isSystemAdmin =
     Boolean(currentUser.headerSubtitle?.includes('System administrator')) ||
@@ -2798,7 +2816,20 @@ export const MasterDataSetupAccessView: React.FC<{
   // ── Load persisted master data & setup checklist on mount ───────────────────
   useEffect(() => {
     fetchMasterData('app_roles', DEFAULT_ROLE_DEFINITIONS).then((roles) => {
-      if (Array.isArray(roles) && roles.length > 0) setRoleDefinitions(roles);
+      if (Array.isArray(roles) && roles.length > 0) {
+        const migratedRoles = roles.some((role) => role.name === 'Supervising Auditor')
+          ? roles
+          : [
+              ...roles,
+              {
+                name: 'Supervising Auditor',
+                accessRole: 'Audit Supervisor' as AppRole,
+                builtIn: true,
+              },
+            ];
+        setRoleDefinitions(migratedRoles);
+        if (migratedRoles !== roles) saveMasterData('app_roles', migratedRoles);
+      }
     });
     fetchMasterData('entity_types', DEFAULT_ENTITY_TYPES).then(setEntityTypes);
     fetchMasterData('audit_categories', DEFAULT_AUDIT_CATEGORIES).then(setAuditCategories);
@@ -2945,6 +2976,14 @@ export const MasterDataSetupAccessView: React.FC<{
     const updated = entityTypes.map((item) => (item === oldVal ? trimmed : item));
     setEntityTypes(updated);
     saveMasterData('entity_types', updated);
+    universe
+      .filter((entity) => entity.category === oldVal)
+      .forEach((entity) => onUpdateUniverseEntity?.({
+        ...entity,
+        category: trimmed,
+        modifiedBy: getCurrentAccountEmail(),
+        modifiedAt: new Date().toISOString(),
+      }));
     setEditingEntityType(null);
   };
 
@@ -2979,6 +3018,14 @@ export const MasterDataSetupAccessView: React.FC<{
     const updated = auditCategories.map((item) => (item === oldVal ? trimmed : item));
     setAuditCategories(updated);
     saveMasterData('audit_categories', updated);
+    universe
+      .filter((entity) => entity.division === oldVal)
+      .forEach((entity) => onUpdateUniverseEntity?.({
+        ...entity,
+        division: trimmed,
+        modifiedBy: getCurrentAccountEmail(),
+        modifiedAt: new Date().toISOString(),
+      }));
     setEditingCategory(null);
   };
 
@@ -3577,16 +3624,12 @@ export const MasterDataSetupAccessView: React.FC<{
 
   const handleUpdateUserRole = (userId: string, newRole: string) => {
     const accessRole = normalizeRole(newRole);
-    setAccessUsers((prev) =>
-      prev.map((item) => {
-        if (item.id !== userId) return item;
-        return {
-          ...item,
-          roles: [newRole],
-          title: `${newRole} · Internal Audit`,
-        } as any;
-      })
+    const updatedUsers = accessUsers.map((item) =>
+      item.id === userId
+        ? { ...item, roles: [newRole], title: `${newRole} · Internal Audit` }
+        : item
     );
+    setAccessUsers(updatedUsers);
 
     const targetUser = accessUsers.find((u) => u.id === userId);
     if (onUpdateUserProfile && targetUser) {
@@ -3608,9 +3651,7 @@ export const MasterDataSetupAccessView: React.FC<{
         employeeNumber: (targetUser as any).employeeNumber,
       });
     }
-    saveMasterData('access_users_registry', accessUsers.map((user) =>
-      user.id === userId ? { ...user, roles: [newRole], title: `${newRole} · Internal Audit` } : user
-    ));
+    saveMasterData('access_users_registry', updatedUsers);
     notifyAccess('success', `Role for "${targetUser?.name || 'User'}" updated to "${newRole}".`);
   };
 

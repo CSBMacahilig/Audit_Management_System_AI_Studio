@@ -1019,6 +1019,8 @@ export default function App() {
                   onDeleteUserProfile={handleDeleteUserProfile}
                   onResetSystemForUAT={handleResetSystemForUAT}
                   onRolePermissionMatrixChange={setPermissionMatrix}
+                  universe={universe}
+                  onUpdateUniverseEntity={handleUpdateUniverseEntity}
                 />
               )}
             </>
