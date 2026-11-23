@@ -19,6 +19,14 @@ import { formatDateForDisplay, toDateInputValue } from '../utils/date';
 import { formatIdentifier, normalizeLegacyIdentifier } from '../utils/identifiers';
 
 const DEFAULT_FINDING_SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
+const DEFAULT_FINDING_CATEGORIES = [
+  'Financial reporting',
+  'Operations',
+  'Regulatory compliance',
+  'Information technology',
+  'Governance',
+  'Other',
+];
 const DEFAULT_REPORT_RATINGS = ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'];
 
 interface FieldworkViewProps {
@@ -44,7 +52,8 @@ interface FieldworkViewProps {
     title: string,
     controlArea: string,
     procedure: string,
-    hasException: boolean
+    observations: string,
+    conclusion: WorkingNote['conclusion']
   ) => void;
   onAddFinding?: (engagementId: string, finding: AuditFinding) => void;
   onUpdateFindingStatus?: (
@@ -106,28 +115,37 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
   const [noteTitle, setNoteTitle] = useState('');
   const [noteArea, setNoteArea] = useState('');
   const [noteProc, setNoteProc] = useState('');
-  const [noteEx, setNoteEx] = useState(false);
+  const [noteObservations, setNoteObservations] = useState('');
+  const [noteConclusion, setNoteConclusion] = useState<WorkingNote['conclusion']>('Not concluded');
 
   // Findings sub-tab state
   const [showNewFindingModal, setShowNewFindingModal] = useState(false);
   const [fndTitle, setFndTitle] = useState('');
   const [fndSeverity, setFndSeverity] = useState('High');
+  const [fndCategory, setFndCategory] = useState(DEFAULT_FINDING_CATEGORIES[0]);
   const [findingSeverities, setFindingSeverities] = useState(DEFAULT_FINDING_SEVERITIES);
+  const [findingCategories, setFindingCategories] = useState(DEFAULT_FINDING_CATEGORIES);
   const [reportRatings, setReportRatings] = useState(DEFAULT_REPORT_RATINGS);
   const [fndCondition, setFndCondition] = useState('');
   const [fndCriteria, setFndCriteria] = useState('');
   const [fndCause, setFndCause] = useState('');
   const [fndEffect, setFndEffect] = useState('');
   const [fndRecommendation, setFndRecommendation] = useState('');
-  const [fndOwner, setFndOwner] = useState('E. Navarro (IT)');
-  const [fndTargetDate, setFndTargetDate] = useState('2026-11-30');
-  const [fndLinkedNote, setFndLinkedNote] = useState('WN-002');
+  const [fndOwner, setFndOwner] = useState('');
+  const [fndTargetDate, setFndTargetDate] = useState('');
+  const [fndLinkedNote, setFndLinkedNote] = useState('');
 
   useEffect(() => {
     fetchMasterData('finding_severities', DEFAULT_FINDING_SEVERITIES).then((severities) => {
       if (severities.length > 0) {
         setFindingSeverities(severities);
         setFndSeverity((current) => severities.includes(current) ? current : severities[0]);
+      }
+    });
+    fetchMasterData('finding_categories', DEFAULT_FINDING_CATEGORIES).then((categories) => {
+      if (categories.length > 0) {
+        setFindingCategories(categories);
+        setFndCategory((current) => categories.includes(current) ? current : categories[0]);
       }
     });
     fetchMasterData('report_ratings', DEFAULT_REPORT_RATINGS).then((ratings) => {
@@ -538,27 +556,69 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
     notify(`${note.ref} updated to "${targetStatus}" by ${currentUser.name}.`);
   };
 
+  const handleCreateWorkingNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    const safeTitle = sanitizeText(noteTitle, 160);
+    const safeArea = sanitizeText(noteArea, 100);
+    const safeProcedure = sanitizeMultiline(noteProc, 1000);
+    const safeObservations = sanitizeMultiline(noteObservations, 1000);
+    if (!safeTitle || !safeArea || !safeProcedure || !safeObservations) {
+      notify('Complete all required working note fields before saving.');
+      return;
+    }
+    onAddWorkingNote(eng.id, safeTitle, safeArea, safeProcedure, safeObservations, noteConclusion);
+    setNoteTitle('');
+    setNoteArea('');
+    setNoteProc('');
+    setNoteObservations('');
+    setNoteConclusion('Not concluded');
+    setShowNewNoteModal(false);
+    notify(`Working note "${safeTitle}" created and submitted for review.`);
+  };
+
   const handleCreateFinding = (e: React.FormEvent) => {
     e.preventDefault();
     const safeTitle = sanitizeText(fndTitle, 180);
-    if (!safeTitle) return;
+    const condition = sanitizeMultiline(fndCondition, 800);
+    const criteria = sanitizeMultiline(fndCriteria, 600);
+    const cause = sanitizeMultiline(fndCause, 600);
+    const effect = sanitizeMultiline(fndEffect, 600);
+    const recommendation = sanitizeMultiline(fndRecommendation, 800);
+    const owner = sanitizeText(fndOwner, 100);
+    const targetDate = sanitizeText(fndTargetDate, 40);
+    const linkedNote = eng.workingNotes.find((note) => note.ref === fndLinkedNote);
+    if (
+      !safeTitle ||
+      !findingSeverities.includes(fndSeverity) ||
+      !findingCategories.includes(fndCategory) ||
+      !condition ||
+      !criteria ||
+      !cause ||
+      !effect ||
+      !recommendation ||
+      !owner ||
+      !targetDate ||
+      !linkedNote
+    ) {
+      notify('Complete all required finding fields and select a valid supporting working note.');
+      return;
+    }
     const nextIdx = eng.findings.length + 1;
     const newFinding: AuditFinding = {
       id: formatIdentifier('FN', nextIdx).toLowerCase(),
       ref: formatIdentifier('FN', nextIdx),
       title: safeTitle,
       severity: fndSeverity,
-      condition: sanitizeMultiline(fndCondition, 800) || 'Control exception observed during sample testing.',
-      criteria: sanitizeMultiline(fndCriteria, 600) || 'Bank Internal Control Standard & BSP Circular 982.',
-      cause: sanitizeMultiline(fndCause, 600) || 'Configuration validation gap during deployment.',
-      effect: sanitizeMultiline(fndEffect, 600) || 'Elevated operational or compliance risk exposure.',
-      recommendation:
-        sanitizeMultiline(fndRecommendation, 800) ||
-        'Implement automated validation control and perform retrospective review.',
-      owner: sanitizeText(fndOwner, 100) || 'E. Navarro (IT)',
-      targetDate: formatDateForDisplay(sanitizeText(fndTargetDate, 40)) || '30 Nov 2026',
+      category: fndCategory,
+      condition,
+      criteria,
+      cause,
+      effect,
+      recommendation,
+      owner,
+      targetDate: formatDateForDisplay(targetDate),
       status: 'Open',
-      linkedNoteRef: sanitizeText(fndLinkedNote, 20) || 'WN-001',
+      linkedNoteRef: linkedNote.ref,
     };
     onAddFinding?.(eng.id, newFinding);
     setFndTitle('');
@@ -567,6 +627,9 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
     setFndCause('');
     setFndEffect('');
     setFndRecommendation('');
+    setFndOwner('');
+    setFndTargetDate('');
+    setFndLinkedNote('');
     setShowNewFindingModal(false);
     notify(`Finding ${newFinding.ref} added and linked to ${newFinding.linkedNoteRef}.`);
   };
@@ -2008,12 +2071,14 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
       {/* Modal: New Working Note */}
       {showNewNoteModal && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-3 text-xs">
+          <form onSubmit={handleCreateWorkingNote} className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-3 text-xs">
             <h3 className="text-base font-bold text-slate-900">Add Working Note</h3>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Title</label>
               <input
                 type="text"
+                required
+                maxLength={160}
                 value={noteTitle}
                 onChange={(e) => setNoteTitle(e.target.value)}
                 placeholder="e.g. Encryption key rotation verification"
@@ -2026,6 +2091,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
               </label>
               <input
                 type="text"
+                required
+                maxLength={100}
                 value={noteArea}
                 onChange={(e) => setNoteArea(e.target.value)}
                 placeholder="e.g. Cryptographic Controls"
@@ -2034,24 +2101,42 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                Testing Procedure &amp; Conclusion
+                Testing Procedure
               </label>
               <textarea
+                required
                 rows={3}
+                maxLength={1000}
                 value={noteProc}
                 onChange={(e) => setNoteProc(e.target.value)}
-                placeholder="Describe sample tested and results..."
+                placeholder="Describe the test steps and sample selected."
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
               />
             </div>
-            <label className="flex items-center gap-2 font-medium text-slate-800">
-              <input
-                type="checkbox"
-                checked={noteEx}
-                onChange={(e) => setNoteEx(e.target.checked)}
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Notes / Observations</label>
+              <textarea
+                required
+                rows={3}
+                maxLength={1000}
+                value={noteObservations}
+                onChange={(e) => setNoteObservations(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
               />
-              Exception noted during testing
-            </label>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Conclusion</label>
+              <select
+                required
+                value={noteConclusion}
+                onChange={(e) => setNoteConclusion(e.target.value as WorkingNote['conclusion'])}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+              >
+                <option value="Not concluded">Not concluded</option>
+                <option value="Satisfactory">Satisfactory</option>
+                <option value="Exception noted">Exception noted</option>
+              </select>
+            </div>
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
@@ -2061,30 +2146,13 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                 Cancel
               </button>
               <button
-                type="button"
-                onClick={() => {
-                  const safeTitle = sanitizeText(noteTitle, 160);
-                  if (!safeTitle) return;
-                  onAddWorkingNote(
-                    eng.id,
-                    safeTitle,
-                    sanitizeText(noteArea, 100) || 'General Controls',
-                    sanitizeMultiline(noteProc, 1000) || 'Walkthrough completed.',
-                    noteEx
-                  );
-                  setNoteTitle('');
-                  setNoteArea('');
-                  setNoteProc('');
-                  setNoteEx(false);
-                  setShowNewNoteModal(false);
-                  notify(`Working note "${safeTitle}" created and submitted for review.`);
-                }}
+                type="submit"
                 className="px-4 py-1.5 bg-[#5A626A] text-white rounded-md font-semibold cursor-pointer"
               >
                 Save note
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -2115,6 +2183,7 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                     Severity Rating
                   </label>
                   <select
+                    required
                     value={fndSeverity}
                     onChange={(e) => setFndSeverity(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
@@ -2125,23 +2194,43 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Linked Working Note
-                  </label>
-                  <input
-                    type="text"
-                    value={fndLinkedNote}
-                    onChange={(e) => setFndLinkedNote(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md font-mono-tabular"
-                  />
+                  <label className="block font-semibold text-slate-700 mb-1">Finding Category</label>
+                  <select
+                    required
+                    value={fndCategory}
+                    onChange={(e) => setFndCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                  >
+                    {findingCategories.map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Linked Working Note
+                </label>
+                <select
+                  required
+                  value={fndLinkedNote}
+                  onChange={(e) => setFndLinkedNote(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white font-mono-tabular"
+                >
+                  <option value="">Select supporting working note</option>
+                  {eng.workingNotes.map((note) => (
+                    <option key={note.id} value={note.ref}>{note.ref} · {note.title}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Condition (Observation)
                 </label>
                 <textarea
+                  required
                   rows={2}
+                  maxLength={800}
                   value={fndCondition}
                   onChange={(e) => setFndCondition(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-md"
@@ -2154,6 +2243,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   </label>
                   <input
                     type="text"
+                    required
+                    maxLength={600}
                     value={fndCriteria}
                     onChange={(e) => setFndCriteria(e.target.value)}
                     placeholder="e.g. BSP Circular 982 / InfoSec §4.1"
@@ -2166,6 +2257,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   </label>
                   <input
                     type="text"
+                    required
+                    maxLength={600}
                     value={fndCause}
                     onChange={(e) => setFndCause(e.target.value)}
                     placeholder="e.g. Missing gateway policy check"
@@ -2174,11 +2267,24 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                 </div>
               </div>
               <div>
+                <label className="block font-semibold text-slate-700 mb-1">Effect</label>
+                <textarea
+                  required
+                  rows={2}
+                  maxLength={600}
+                  value={fndEffect}
+                  onChange={(e) => setFndEffect(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-md"
+                />
+              </div>
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Recommendation
                 </label>
                 <textarea
+                  required
                   rows={2}
+                  maxLength={800}
                   value={fndRecommendation}
                   onChange={(e) => setFndRecommendation(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-md"
@@ -2191,6 +2297,8 @@ export const FieldworkView: React.FC<FieldworkViewProps> = ({
                   </label>
                   <input
                     type="text"
+                    required
+                    maxLength={100}
                     value={fndOwner}
                     onChange={(e) => setFndOwner(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-md"

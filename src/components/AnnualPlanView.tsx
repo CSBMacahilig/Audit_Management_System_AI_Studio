@@ -29,6 +29,7 @@ interface AnnualPlanViewProps {
 
 export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   engagements,
+  universe,
   userProfiles,
   auditDivisionRiskScales,
   onSelectEngagement,
@@ -50,14 +51,23 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   const [newCategory, setNewCategory] = useState(DEFAULT_AUDIT_TYPES[0]);
   const [auditTypes, setAuditTypes] = useState(DEFAULT_AUDIT_TYPES);
   const [auditStatuses, setAuditStatuses] = useState(['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed', 'Deferred', 'Cancelled']);
-  const [newEntity, setNewEntity] = useState('');
+  const [newEntityId, setNewEntityId] = useState('');
   const [newAuditDivisionId, setNewAuditDivisionId] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
-  const [newLead, setNewLead] = useState('A. Villanueva');
-  const [newStart, setNewStart] = useState('2026-11-02');
-  const [newEnd, setNewEnd] = useState('2026-12-11');
+  const [newLead, setNewLead] = useState('');
+  const [newHeadReviewer, setNewHeadReviewer] = useState('');
+  const [newIndependentReviewer, setNewIndependentReviewer] = useState('Not needed');
+  const [newStart, setNewStart] = useState('');
+  const [newEnd, setNewEnd] = useState('');
   const [newStatus, setNewStatus] = useState('Planned');
+  const [newObjectives, setNewObjectives] = useState('');
+  const [newScope, setNewScope] = useState('');
+  const [newCriteria, setNewCriteria] = useState('');
+  const [newAddresseeName, setNewAddresseeName] = useState('');
+  const [newAddresseeTitle, setNewAddresseeTitle] = useState('');
+  const [newCopyFurnished, setNewCopyFurnished] = useState('');
+  const [newBudgetedHours, setNewBudgetedHours] = useState('');
 
   useEffect(() => {
     fetchMasterData('audit_types', DEFAULT_AUDIT_TYPES).then((types) => {
@@ -157,7 +167,33 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
 
   const handleCreateAudit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newEntity.trim() || !newAuditDivisionId) return;
+    const selectedEntity = universe.find((entity) => entity.id === newEntityId);
+    const startTime = Date.parse(`${newStart}T00:00:00Z`);
+    const endTime = Date.parse(`${newEnd}T00:00:00Z`);
+    const budgetedHours = Number(newBudgetedHours);
+    if (
+      !newTitle.trim() ||
+      !selectedEntity ||
+      !newAuditDivisionId ||
+      !newLead ||
+      !newHeadReviewer ||
+      !newIndependentReviewer ||
+      !newStart ||
+      !newEnd ||
+      !Number.isFinite(startTime) ||
+      !Number.isFinite(endTime) ||
+      endTime < startTime ||
+      !Number.isFinite(budgetedHours) ||
+      budgetedHours <= 0 ||
+      !newObjectives.trim() ||
+      !newScope.trim() ||
+      !newCriteria.trim() ||
+      !newAddresseeName.trim() ||
+      !newAddresseeTitle.trim()
+    ) {
+      setBannerMessage('Complete all required planning fields, select an Audit Universe entity, and use valid dates and budget hours.');
+      return;
+    }
     const score = newLikelihood * newImpact;
     const riskLevel = getAuditRiskLevel(score, newAuditDivisionId, auditDivisionRiskScales);
     const fieldworkWeeks = getAuditFieldworkWeeks(riskLevel, newAuditDivisionId, auditDivisionRiskScales);
@@ -172,18 +208,24 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       category: newCategory,
       department: newCategory,
       auditDivisionId: newAuditDivisionId,
-      entityName: newEntity.trim(),
+      entityName: selectedEntity.name,
       likelihood: newLikelihood,
       impact: newImpact,
       riskScore: score,
       riskLevel,
       lead: newLead,
-      headReviewer: 'M. Santos',
-      independentReviewer: 'Not needed',
+      headReviewer: newHeadReviewer,
+      independentReviewer: newIndependentReviewer,
       startDate: newStart,
       endDate: newEnd,
-      durationDays: 26,
-      budgetedHours: 240,
+      objectives: newObjectives.trim(),
+      scope: newScope.trim(),
+      criteria: newCriteria.trim(),
+      addresseeName: newAddresseeName.trim(),
+      addresseeTitle: newAddresseeTitle.trim(),
+      copyFurnished: newCopyFurnished.trim(),
+      durationDays: Math.floor((endTime - startTime) / 86_400_000) + 1,
+      budgetedHours,
       status: newStatus,
       readyRatio: '0/9 ready',
       lifecycleStage: 1,
@@ -192,7 +234,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       fieldworkDayTotal: fieldworkWeeks * 5,
       reportStatus: 'Draft',
       reportRef: `IA-${selectedYear}-0${nextNum}-RPT`,
-      executiveSummary: `Scheduled audit engagement for ${newEntity.trim()}.`,
+      executiveSummary: newObjectives.trim(),
       addedBy: getCurrentAccountEmail(),
       modifiedBy: getCurrentAccountEmail(),
       modifiedAt: new Date().toISOString(),
@@ -203,8 +245,8 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       activityLog: [
         {
           id: `AL-${Date.now().toString().slice(-4).padStart(4, '0')}`,
-          timestamp: '4 Oct 2026, 09:15',
-          actor: 'M. Santos',
+          timestamp: new Date().toLocaleString('en-GB'),
+          actor: newLead,
           action: `${ref} added to Annual Audit Plan ${selectedYear}`,
         },
       ],
@@ -212,8 +254,19 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
 
     onAddEngagement(created);
     setNewTitle('');
-    setNewEntity('');
+    setNewEntityId('');
     setNewAuditDivisionId('');
+    setNewHeadReviewer('');
+    setNewIndependentReviewer('Not needed');
+    setNewStart('');
+    setNewEnd('');
+    setNewObjectives('');
+    setNewScope('');
+    setNewCriteria('');
+    setNewAddresseeName('');
+    setNewAddresseeTitle('');
+    setNewCopyFurnished('');
+    setNewBudgetedHours('');
     setShowNewModal(false);
     setBannerMessage(`Added ${created.ref} (${created.title}) to Annual Plan ${selectedYear}.`);
   };
@@ -475,7 +528,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       {/* Modal: New Audit */}
       {showNewModal && (
         <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5">
+          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full p-5 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-slate-900">
               Schedule New Audit Engagement
             </h3>
@@ -502,6 +555,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     Audit Type
                   </label>
                   <select
+                    required
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
@@ -516,10 +570,12 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     Engagement Lead
                   </label>
                   <select
+                    required
                     value={newLead}
                     onChange={(e) => setNewLead(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
                   >
+                    <option value="">Select an engagement lead</option>
                     {userProfiles.map((u) => (
                       <option key={u.id} value={u.name}>
                         {u.name}
@@ -532,6 +588,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                     Audit Status
                   </label>
                   <select
+                    required
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
@@ -542,18 +599,51 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   </select>
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Head Reviewer</label>
+                  <select
+                    required
+                    value={newHeadReviewer}
+                    onChange={(e) => setNewHeadReviewer(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                  >
+                    <option value="">Select a head reviewer</option>
+                    {userProfiles.filter((profile) => profile.canApproveHead).map((profile) => (
+                      <option key={profile.id} value={profile.name}>{profile.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Independent Reviewer</label>
+                  <select
+                    required
+                    value={newIndependentReviewer}
+                    onChange={(e) => setNewIndependentReviewer(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                  >
+                    <option value="Not needed">Not needed</option>
+                    {userProfiles.filter((profile) => profile.canApproveIndependent).map((profile) => (
+                      <option key={profile.id} value={profile.name}>{profile.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Auditable Entity Name
+                  Audit Universe Entity
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  value={newEntity}
-                  onChange={(e) => setNewEntity(e.target.value)}
-                  placeholder="e.g. Bancassurance settlement & commission ledger"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
-                />
+                  value={newEntityId}
+                  onChange={(e) => setNewEntityId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                >
+                  <option value="">Select an audited entity</option>
+                  {universe.map((entity) => (
+                    <option key={entity.id} value={entity.id}>{entity.code} · {entity.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
@@ -578,6 +668,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={newLikelihood}
@@ -591,10 +682,90 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={newImpact}
                     onChange={(e) => setNewImpact(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Budgeted Hours</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    step={1}
+                    value={newBudgetedHours}
+                    onChange={(e) => setNewBudgetedHours(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Objectives</label>
+                  <textarea
+                    required
+                    rows={2}
+                    maxLength={2000}
+                    value={newObjectives}
+                    onChange={(e) => setNewObjectives(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Scope</label>
+                  <textarea
+                    required
+                    rows={2}
+                    maxLength={2000}
+                    value={newScope}
+                    onChange={(e) => setNewScope(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Criteria</label>
+                  <textarea
+                    required
+                    rows={2}
+                    maxLength={2000}
+                    value={newCriteria}
+                    onChange={(e) => setNewCriteria(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Notification Addressee</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={160}
+                      value={newAddresseeName}
+                      onChange={(e) => setNewAddresseeName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Addressee Title</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={160}
+                      value={newAddresseeTitle}
+                      onChange={(e) => setNewAddresseeTitle(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Copy Furnished</label>
+                  <textarea
+                    rows={2}
+                    maxLength={1000}
+                    value={newCopyFurnished}
+                    onChange={(e) => setNewCopyFurnished(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   />
                 </div>

@@ -493,6 +493,7 @@ export const AuditUniverseView: React.FC<{
   const [categoryFilter, setCategoryFilter] = useState('All categories');
   const [riskFilter, setRiskFilter] = useState('All risk levels');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [universeFormError, setUniverseFormError] = useState<string | null>(null);
 
   // Add entity form
   const [newName, setNewName] = useState('');
@@ -505,8 +506,9 @@ export const AuditUniverseView: React.FC<{
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(4);
   const [newRiskScore, setNewRiskScore] = useState(16);
+  const [newRiskNotes, setNewRiskNotes] = useState('');
   const [scoreOverridden, setScoreOverridden] = useState(false);
-  const [newLastAudit, setNewLastAudit] = useState('2026-10-04');
+  const [newLastAudit, setNewLastAudit] = useState('');
 
   // Edit entity modal form
   const [editingRecord, setEditingRecord] = useState<UniverseRecord | null>(null);
@@ -518,6 +520,7 @@ export const AuditUniverseView: React.FC<{
   const [editLikelihood, setEditLikelihood] = useState(4);
   const [editImpact, setEditImpact] = useState(4);
   const [editRiskScore, setEditRiskScore] = useState(16);
+  const [editRiskNotes, setEditRiskNotes] = useState('');
   const [editLastAudit, setEditLastAudit] = useState('2026-10-04');
   const [editCycleMonths, setEditCycleMonths] = useState(12);
   const [editNextDue, setEditNextDue] = useState('');
@@ -548,6 +551,7 @@ export const AuditUniverseView: React.FC<{
   };
 
   const handleOpenEditModal = (rec: UniverseRecord) => {
+    setUniverseFormError(null);
     setEditingRecord(rec);
     setEditName(rec.name);
     setEditSubtitle(rec.subtitle);
@@ -557,6 +561,7 @@ export const AuditUniverseView: React.FC<{
     setEditLikelihood(rec.likelihood);
     setEditImpact(rec.impact);
     setEditRiskScore(rec.riskScore);
+    setEditRiskNotes(rec.riskNotes ?? '');
     setEditLastAudit(toDateInputValue(rec.lastAudit));
     setEditCycleMonths(rec.cycleMonths);
     setEditNextDue(toDateInputValue(rec.nextDue));
@@ -578,13 +583,33 @@ export const AuditUniverseView: React.FC<{
 
   const handleAddEntity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newAuditDivisionId) return;
+    if (
+      !newName.trim() ||
+      !newSubtitle.trim() ||
+      !newType.trim() ||
+      !newOwner.trim() ||
+      !newAuditDivisionId ||
+      !newLastAudit ||
+      !Number.isInteger(newLikelihood) ||
+      newLikelihood < 1 ||
+      newLikelihood > 5 ||
+      !Number.isInteger(newImpact) ||
+      newImpact < 1 ||
+      newImpact > 5 ||
+      !Number.isFinite(newRiskScore) ||
+      newRiskScore < 1 ||
+      newRiskScore > 25
+    ) {
+      setUniverseFormError('Complete all required entity fields and use valid risk scores before saving.');
+      return;
+    }
+    setUniverseFormError(null);
     const nextSequence = nextIdentifierSequence(
       records.map((record) => ({ id: record.id })),
       'AU'
     );
     const identifier = formatIdentifier('AU', nextSequence);
-    const score = Number(newRiskScore) || (newLikelihood * newImpact);
+    const score = newRiskScore;
     const riskLevel: AuditRiskLevel = calculateRiskLevel(score, newAuditDivisionId);
     const cycleMonths = getCycleMonths(riskLevel, newAuditDivisionId);
     const formattedLastAudit = formatDateDisplay(newLastAudit);
@@ -598,6 +623,7 @@ export const AuditUniverseView: React.FC<{
       type: newType,
       auditDivisionId: newAuditDivisionId,
       owner: newOwner.trim(),
+      riskNotes: newRiskNotes.trim(),
       likelihood: newLikelihood,
       impact: newImpact,
       riskScore: score,
@@ -628,6 +654,7 @@ export const AuditUniverseView: React.FC<{
         nextDue: added.nextDue,
         cycleMonths: added.cycleMonths,
         defaultLead: added.owner,
+        riskNotes: added.riskNotes,
         addedBy: added.addedBy,
         modifiedBy: added.modifiedBy,
         modifiedAt: added.modifiedAt,
@@ -635,16 +662,37 @@ export const AuditUniverseView: React.FC<{
     }
 
     setNewName('');
+    setNewRiskNotes('');
     setScoreOverridden(false);
     setNewAuditDivisionId('');
+    setNewLastAudit('');
     setShowAddModal(false);
   };
 
   const handleSaveEditEntity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingRecord || !editName.trim()) return;
+    if (
+      !editingRecord ||
+      !editName.trim() ||
+      !editSubtitle.trim() ||
+      !editType.trim() ||
+      !editOwner.trim() ||
+      !Number.isInteger(editLikelihood) ||
+      editLikelihood < 1 ||
+      editLikelihood > 5 ||
+      !Number.isInteger(editImpact) ||
+      editImpact < 1 ||
+      editImpact > 5 ||
+      !Number.isFinite(editRiskScore) ||
+      editRiskScore < 1 ||
+      editRiskScore > 25
+    ) {
+      setUniverseFormError('Complete all required entity fields and use valid risk scores before saving.');
+      return;
+    }
+    setUniverseFormError(null);
 
-    const score = Number(editRiskScore) || (editLikelihood * editImpact);
+    const score = editRiskScore;
     const riskLevel: AuditRiskLevel = calculateRiskLevel(score, editAuditDivisionId);
     const cycleMonths = editCycleMonths || getCycleMonths(riskLevel, editAuditDivisionId);
     const formattedLastAudit = formatDateDisplay(editLastAudit);
@@ -660,6 +708,7 @@ export const AuditUniverseView: React.FC<{
       type: editType,
       auditDivisionId: editAuditDivisionId || undefined,
       owner: editOwner.trim(),
+      riskNotes: editRiskNotes.trim(),
       likelihood: editLikelihood,
       impact: editImpact,
       riskScore: score,
@@ -691,6 +740,7 @@ export const AuditUniverseView: React.FC<{
         nextDue: updated.nextDue,
         cycleMonths: updated.cycleMonths,
         defaultLead: updated.owner,
+        riskNotes: updated.riskNotes,
         addedBy: updated.addedBy,
         modifiedBy: updated.modifiedBy,
         modifiedAt: updated.modifiedAt,
@@ -933,6 +983,7 @@ export const AuditUniverseView: React.FC<{
               </button>
             </div>
             <form onSubmit={handleAddEntity} className="mt-4 space-y-3.5">
+              {universeFormError && <p role="alert" className="text-xs text-rose-700">{universeFormError}</p>}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Entity Name
@@ -952,6 +1003,7 @@ export const AuditUniverseView: React.FC<{
                   Division / Category
                 </label>
                 <select
+                  required
                   value={newSubtitle}
                   onChange={(e) => setNewSubtitle(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
@@ -967,24 +1019,12 @@ export const AuditUniverseView: React.FC<{
                   Audit Division
                 </label>
                 <select
-                  value={editAuditDivisionId}
-                  onChange={(e) => {
-                    const divisionId = e.target.value;
-                    setEditAuditDivisionId(divisionId);
-                    const cycleMonths = getCycleMonths(
-                      calculateRiskLevel(editRiskScore, divisionId),
-                      divisionId
-                    );
-                    setEditCycleMonths(cycleMonths);
-                    const lastAuditDate = new Date(`${editLastAudit}T00:00:00`);
-                    if (!Number.isNaN(lastAuditDate.getTime())) {
-                      lastAuditDate.setMonth(lastAuditDate.getMonth() + cycleMonths);
-                      setEditNextDue(lastAuditDate.toISOString().slice(0, 10));
-                    }
-                  }}
+                  required
+                  value={newAuditDivisionId}
+                  onChange={(e) => setNewAuditDivisionId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
                 >
-                  <option value="">Unassigned (use fallback scale)</option>
+                  <option value="">Select audit division</option>
                   {auditDivisionRiskScales.map((scale) => (
                     <option key={scale.id} value={scale.id}>{scale.name}</option>
                   ))}
@@ -997,6 +1037,7 @@ export const AuditUniverseView: React.FC<{
                     Entity Type
                   </label>
                   <select
+                    required
                     value={newType}
                     onChange={(e) =>
                       setNewType(e.target.value as UniverseRecord['type'])
@@ -1013,6 +1054,7 @@ export const AuditUniverseView: React.FC<{
                     Process Owner
                   </label>
                   <select
+                    required
                     value={newOwner}
                     onChange={(e) => setNewOwner(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
@@ -1034,6 +1076,7 @@ export const AuditUniverseView: React.FC<{
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={newLikelihood}
@@ -1053,6 +1096,7 @@ export const AuditUniverseView: React.FC<{
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={newImpact}
@@ -1097,8 +1141,9 @@ export const AuditUniverseView: React.FC<{
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                      min={1}
-                      max={10}
+                    min={1}
+                    max={25}
+                    required
                     value={newRiskScore}
                     onChange={(e) => {
                       setNewRiskScore(Number(e.target.value));
@@ -1126,6 +1171,7 @@ export const AuditUniverseView: React.FC<{
                 </label>
                 <input
                   type="date"
+                  required
                   value={newLastAudit}
                   onChange={(e) => setNewLastAudit(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
@@ -1133,6 +1179,18 @@ export const AuditUniverseView: React.FC<{
                 <span className="text-[11px] text-slate-500 mt-1 block">
                   Next audit due will be automatically scheduled from this date based on {calculateRiskLevel(newRiskScore, newAuditDivisionId)} risk cycle.
                 </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Risk Notes</label>
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={newRiskNotes}
+                  onChange={(e) => setNewRiskNotes(e.target.value)}
+                  placeholder="Document the rationale for this entity's risk assessment."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1172,6 +1230,7 @@ export const AuditUniverseView: React.FC<{
               </button>
             </div>
             <form onSubmit={handleSaveEditEntity} className="mt-4 space-y-3.5">
+              {universeFormError && <p role="alert" className="text-xs text-rose-700">{universeFormError}</p>}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Entity Name
@@ -1190,6 +1249,7 @@ export const AuditUniverseView: React.FC<{
                   Division / Category
                 </label>
                 <select
+                  required
                   value={editSubtitle}
                   onChange={(e) => setEditSubtitle(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
@@ -1231,6 +1291,7 @@ export const AuditUniverseView: React.FC<{
                     Entity Type
                   </label>
                   <select
+                    required
                     value={editType}
                     onChange={(e) =>
                       setEditType(e.target.value as UniverseRecord['type'])
@@ -1250,6 +1311,7 @@ export const AuditUniverseView: React.FC<{
                     Process Owner
                   </label>
                   <select
+                    required
                     value={editOwner}
                     onChange={(e) => setEditOwner(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
@@ -1274,6 +1336,7 @@ export const AuditUniverseView: React.FC<{
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={editLikelihood}
@@ -1287,6 +1350,7 @@ export const AuditUniverseView: React.FC<{
                   </label>
                   <input
                     type="number"
+                    required
                     min={1}
                     max={5}
                     value={editImpact}
@@ -1323,7 +1387,8 @@ export const AuditUniverseView: React.FC<{
                   <input
                     type="number"
                     min={1}
-                    max={10}
+                    max={25}
+                    required
                     value={editRiskScore}
                     onChange={(e) => setEditRiskScore(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs font-bold text-slate-900"
@@ -1394,6 +1459,18 @@ export const AuditUniverseView: React.FC<{
                     <option value="Overdue">Overdue</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Risk Notes</label>
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={editRiskNotes}
+                  onChange={(e) => setEditRiskNotes(e.target.value)}
+                  placeholder="Document the rationale for this entity's risk assessment."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1583,7 +1660,7 @@ export const IssuesView: React.FC<{
   onUpdateIssue: (issue: IssueRegisterItem) => void;
   activeLifecycleStage: LifecycleStageId;
   onValidateAndCloseFinding: (engagementId: string, findingId: string) => void;
-}> = ({ activeLifecycleStage, onValidateAndCloseFinding, issues: initialIssues, onUpdateIssue }) => {
+}> = ({ activeLifecycleStage, engagements, onValidateAndCloseFinding, issues: initialIssues, onUpdateIssue }) => {
   const [issues, setIssues] = useState<IssueRegisterItem[]>(initialIssues);
 
   React.useEffect(() => {
@@ -1594,7 +1671,8 @@ export const IssuesView: React.FC<{
     activeLifecycleStage === 6 ? 'For validation' : 'Open'
   );
   const [selectedIssue, setSelectedIssue] = useState<IssueRegisterItem | null>(null);
-  const [extensionDate, setExtensionDate] = useState('2026-11-30');
+  const [extensionDate, setExtensionDate] = useState('');
+  const [extensionReason, setExtensionReason] = useState('');
   const [closureRemarks, setClosureRemarks] = useState('');
 
   const openIssues = issues.filter((i) => i.status !== 'Closed');
@@ -1612,6 +1690,8 @@ export const IssuesView: React.FC<{
   });
 
   const handleValidateClose = (issue: IssueRegisterItem) => {
+    const evidence = closureRemarks.trim();
+    if (!evidence) return;
     const updated: IssueRegisterItem = {
       ...issue,
       status: 'Closed',
@@ -1619,28 +1699,38 @@ export const IssuesView: React.FC<{
       modifiedAt: new Date().toISOString(),
       isOverdue: false,
       isDueSoon: false,
-      daysStatus: 'Closed 4 Oct 2026',
-      evidenceNote:
-        closureRemarks.trim() ||
-        'Validated remediation evidence & closed by Internal Audit.',
+      daysStatus: `Closed ${new Date().toLocaleDateString('en-GB')}`,
+      evidenceNote: evidence,
     };
     setIssues((prev) =>
       prev.map((item) => (item.id === issue.id ? updated : item))
     );
     onUpdateIssue(updated);
-    onValidateAndCloseFinding('aud-2026-006', 'fnd-001');
+    const engagement = engagements.find(
+      (item) => item.ref === issue.auditRef || item.id === issue.auditRef
+    );
+    const finding = engagement?.findings.find(
+      (item) => item.title.trim().toLowerCase() === issue.title.trim().toLowerCase()
+    );
+    if (engagement && finding) onValidateAndCloseFinding(engagement.id, finding.id);
     setClosureRemarks('');
+    setExtensionReason('');
     setSelectedIssue(null);
   };
 
   const handleGrantExtension = (issue: IssueRegisterItem) => {
+    const reason = extensionReason.trim();
+    const currentDueDate = toDateInputValue(issue.currentDue);
+    if (!extensionDate || !currentDueDate || extensionDate <= currentDueDate || !reason) return;
     const updated: IssueRegisterItem = {
       ...issue,
       currentDue: formatDateForDisplay(extensionDate),
+      extensionReason: reason,
       modifiedBy: getCurrentAccountEmail(),
       modifiedAt: new Date().toISOString(),
       extensionCount: issue.extensionCount + 1,
       isOverdue: false,
+      isDueSoon: false,
       daysStatus: `Extended to ${formatDateForDisplay(extensionDate)}`,
       status: 'In progress',
     };
@@ -1648,6 +1738,7 @@ export const IssuesView: React.FC<{
       prev.map((item) => (item.id === issue.id ? updated : item))
     );
     onUpdateIssue(updated);
+    setExtensionReason('');
     setSelectedIssue(null);
   };
 
@@ -1859,6 +1950,8 @@ export const IssuesView: React.FC<{
                       onClick={() => {
                         setSelectedIssue(iss);
                         setExtensionDate(toDateInputValue(iss.currentDue));
+                        setExtensionReason('');
+                        setClosureRemarks('');
                       }}
                       className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded text-xs font-semibold cursor-pointer"
                     >
@@ -1914,6 +2007,12 @@ export const IssuesView: React.FC<{
                 {selectedIssue.originalDue} → Current {selectedIssue.currentDue} (
                 {selectedIssue.extensionCount} extensions)
               </div>
+              {selectedIssue.extensionReason && (
+                <div>
+                  <strong className="text-slate-900">Latest extension reason:</strong>{' '}
+                  {selectedIssue.extensionReason}
+                </div>
+              )}
             </div>
 
             {selectedIssue.status !== 'Closed' && (
@@ -1927,30 +2026,46 @@ export const IssuesView: React.FC<{
                       <input
                         type="date"
                         required
+                        min={toDateInputValue(selectedIssue.currentDue) || undefined}
                         value={extensionDate}
                         onChange={(e) => setExtensionDate(e.target.value)}
                         className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white"
                       />
                       <button
                         type="button"
-                        disabled={!extensionDate}
+                        disabled={
+                          !extensionDate ||
+                          extensionDate <= toDateInputValue(selectedIssue.currentDue) ||
+                          !extensionReason.trim()
+                        }
                         onClick={() => handleGrantExtension(selectedIssue)}
                         className="px-3 py-1.5 bg-white border border-slate-300 rounded font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Extend
                       </button>
                     </div>
+                    <textarea
+                      required
+                      rows={2}
+                      maxLength={1000}
+                      value={extensionReason}
+                      onChange={(e) => setExtensionReason(e.target.value)}
+                      placeholder="Explain why the current due date cannot be met."
+                      className="w-full mt-2 px-2.5 py-1.5 border border-slate-300 rounded"
+                    />
                   </div>
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Stage 06 Validation Note
+                      Closure Evidence / Validation Note
                     </label>
-                    <input
-                      type="text"
+                    <textarea
+                      required
+                      rows={3}
+                      maxLength={2000}
                       value={closureRemarks}
                       onChange={(e) => setClosureRemarks(e.target.value)}
-                      placeholder="Evidence reference / sign-off..."
+                      placeholder="Reference the evidence reviewed and record the validation outcome."
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded"
                     />
                   </div>
@@ -1969,8 +2084,9 @@ export const IssuesView: React.FC<{
               {selectedIssue.status !== 'Closed' && (
                 <button
                   type="button"
+                  disabled={!closureRemarks.trim()}
                   onClick={() => handleValidateClose(selectedIssue)}
-                  className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-semibold cursor-pointer"
+                  className="px-4 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-md font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Validate evidence &amp; close issue
                 </button>
@@ -2035,6 +2151,7 @@ const DEFAULT_DEPARTMENTS = [
 const DEFAULT_CONFIGURABLE_LISTS = {
   departments: DEFAULT_DEPARTMENTS,
   audit_types: ['Financial audit', 'Operational audit', 'Compliance audit', 'IT audit', 'Thematic audit'],
+  finding_categories: ['Financial reporting', 'Operations', 'Regulatory compliance', 'Information technology', 'Governance', 'Other'],
   finding_severities: ['Critical', 'High', 'Medium', 'Low'],
   report_ratings: ['Excellent', 'Very Satisfactory', 'Satisfactory', 'Needs Improvement', 'Unsatisfactory'],
   signatories: [
@@ -2050,6 +2167,7 @@ type ConfigurableListKey = keyof typeof DEFAULT_CONFIGURABLE_LISTS;
 const CONFIGURABLE_LISTS: { key: ConfigurableListKey; label: string; description: string }[] = [
   { key: 'departments', label: 'Departments', description: 'Departments available in auditee and audit-universe forms.' },
   { key: 'audit_types', label: 'Audit types', description: 'Maintain the types of audits available for planning.' },
+  { key: 'finding_categories', label: 'Finding categories', description: 'Maintain the categories used to classify audit findings.' },
   { key: 'finding_severities', label: 'Finding severities', description: 'Maintain severity levels used for audit findings.' },
   { key: 'report_ratings', label: 'Report ratings', description: 'Maintain report rating options.' },
   { key: 'signatories', label: 'Signatories', description: 'People or roles available for document sign-off.' },
@@ -2837,6 +2955,7 @@ export const MasterDataSetupAccessView: React.FC<{
   const [newLookupValues, setNewLookupValues] = useState<Record<ConfigurableListKey, string>>({
     departments: '',
     audit_types: '',
+    finding_categories: '',
     finding_severities: '',
     report_ratings: '',
     signatories: '',

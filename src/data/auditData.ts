@@ -336,6 +336,7 @@ export interface WorkingNote {
   hasException: boolean;
   updatedAt: string;
   testingProcedure: string;
+  observations?: string;
   conclusion: string;
   reviewerComments?: string;
   addedBy?: string;
@@ -348,6 +349,7 @@ export interface AuditFinding {
   ref: string;
   title: string;
   severity: string;
+  category?: string;
   condition: string;
   criteria: string;
   cause: string;
@@ -407,6 +409,12 @@ export interface AuditEngagement {
   independentReviewer: string;
   startDate: string;
   endDate: string;
+  objectives?: string;
+  scope?: string;
+  criteria?: string;
+  addresseeName?: string;
+  addresseeTitle?: string;
+  copyFurnished?: string;
   durationDays: number;
   budgetedHours: number;
   status: AuditStatus;
@@ -1423,6 +1431,7 @@ export interface UniverseEntity {
   nextDue: string;
   cycleMonths: number;
   defaultLead: string;
+  riskNotes?: string;
   addedBy?: string;
   modifiedBy?: string;
   modifiedAt?: string;
@@ -1626,6 +1635,7 @@ export interface UniverseRecord {
   lastAudit: string;
   nextDue: string;
   nextDueStatus: 'Overdue' | 'Due soon' | 'On track';
+  riskNotes?: string;
   addedBy?: string;
   modifiedBy?: string;
   modifiedAt?: string;
@@ -2163,6 +2173,7 @@ export interface IssueRegisterItem {
   status: 'Overdue' | 'In progress' | 'Open' | 'Extension requested' | 'For validation' | 'Closed';
   actionPlanSummary: string;
   evidenceNote?: string;
+  extensionReason?: string;
   addedBy?: string;
   modifiedBy?: string;
   modifiedAt?: string;

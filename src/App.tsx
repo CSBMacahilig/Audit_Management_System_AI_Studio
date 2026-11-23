@@ -467,7 +467,8 @@ export default function App() {
     title: string,
     controlArea: string,
     procedure: string,
-    hasException: boolean
+    observations: string,
+    conclusion: WorkingNote['conclusion']
   ) => {
     setEngagements((prev) =>
       prev.map((eng) => {
@@ -481,12 +482,11 @@ export default function App() {
           controlArea,
           author: currentUser?.name ?? '',
           status: 'For head review',
-          hasException,
+          hasException: conclusion === 'Exception noted',
           updatedAt: '4 Oct 2026, 14:20',
           testingProcedure: procedure,
-          conclusion: hasException
-            ? 'Exception noted during sample walk-through.'
-            : 'Controls operating effectively without exception.',
+          observations,
+          conclusion,
         };
         upsertWorkingNote(engagementId, newNote);
 
@@ -1010,6 +1010,7 @@ export default function App() {
                     riskScore: u.riskScore,
                     riskLevel: u.riskLevel,
                     cycleMonths: u.cycleMonths,
+                    riskNotes: u.riskNotes,
                     lastAudit: u.lastAudited || '—',
                     nextDue: u.nextDue || '—',
                     nextDueStatus: (u.nextDue && u.nextDue.toLowerCase().includes('overdue')
