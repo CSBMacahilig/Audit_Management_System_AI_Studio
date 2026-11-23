@@ -3,7 +3,8 @@
  *
  * Replaces the previous localStorage-only implementation.
  * All user records are persisted in the `system_users` Supabase table.
- * Sessions are still kept in sessionStorage (SM-4: tab-scoped, not synced server-side).
+ * Session tokens are issued and validated by the AMS Supabase Edge Function.
+ * The browser keeps the token in sessionStorage (tab-scoped).
  */
 
 import { supabase } from './supabaseClient';
@@ -38,6 +39,7 @@ export interface AuthSession {
   fullName: string;
   token: string;
   issuedAt: string;
+  expiresAt: string;
   requiresPasswordChange: boolean;
 }
 
@@ -77,7 +79,6 @@ function rowToUser(row: any): SystemUser {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = 'csb_auth_session';
-const MAX_FAILED = 3;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crypto helpers
@@ -92,12 +93,6 @@ export async function hashPassword(password: string): Promise<string> {
     .join('');
 }
 
-export function randomToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Session (sessionStorage — tab-scoped)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,7 +101,13 @@ export function loadSession(): AuthSession | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AuthSession;
+    const session = JSON.parse(raw) as AuthSession;
+    const expiresAt = new Date(session.expiresAt).getTime();
+    if (!session.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      clearSession();
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
@@ -162,123 +163,53 @@ export async function seedDefaultAdmin(): Promise<void> {
 
 export async function login(username: string, password: string): Promise<LoginResult> {
   const GENERIC = 'Login failed. Invalid user ID or password.';
-  const rawInput = username.trim();
-  const clean = rawInput.toLowerCase();
-  const emailPrefix = clean.includes('@') ? clean.split('@')[0] : clean;
-  const attemptedHash = await hashPassword(password);
+  try {
+    const { data, error } = await supabase.functions.invoke<{
+      success: boolean;
+      session?: AuthSession;
+      error?: string;
+      locked?: boolean;
+    }>('ams-api', {
+      body: { action: 'login', username, password },
+    });
 
-  // 1. Fetch system_users and user_profiles to support multi-identifier resolution
-  const [{ data: suList, error: suErr }, { data: profiles }] = await Promise.all([
-    supabase.from('system_users').select('*'),
-    supabase.from('user_profiles').select('*'),
-  ]);
-
-  if (suErr || !suList || suList.length === 0) {
-    return { success: false, error: GENERIC };
-  }
-
-  // 2. Identify candidates matching username, email, full_name, or employee_number
-  const candidates: SystemUser[] = [];
-
-  for (const row of suList) {
-    const u = rowToUser(row);
-    let isMatch = false;
-
-    // Check direct username / email / full_name matches
-    if (u.username.toLowerCase() === clean) isMatch = true;
-    else if (u.email && u.email.toLowerCase() === clean) isMatch = true;
-    else if (u.username.toLowerCase() === emailPrefix) isMatch = true;
-    else if (u.fullName && u.fullName.toLowerCase() === clean) isMatch = true;
-    else if (u.fullName && u.fullName.toLowerCase().replace(/\s+/g, '') === clean.replace(/\s+/g, '')) isMatch = true;
-
-    // Check employee_number in user_profiles
-    if (!isMatch && profiles) {
-      const matchedProfile = profiles.find(
-        (p: any) => p.employee_number && p.employee_number.toLowerCase() === clean
-      );
-      if (
-        matchedProfile &&
-        ((u.fullName && u.fullName.toLowerCase() === matchedProfile.name.toLowerCase()) ||
-          u.username.toLowerCase() === matchedProfile.name.toLowerCase().replace(/\s+/g, '.') ||
-          (matchedProfile.employee_number && u.username.toLowerCase().includes(matchedProfile.employee_number.toLowerCase())))
-      ) {
-        isMatch = true;
-      }
+    if (error) {
+      console.error('Login service request failed:', error.message);
+      return { success: false, error: 'Login service is temporarily unavailable.' };
     }
-
-    if (isMatch) candidates.push(u);
-  }
-
-  if (candidates.length === 0) {
-    return { success: false, error: GENERIC };
-  }
-
-  // 3. Find candidate with matching password hash
-  let targetUser = candidates.find((c) => c.passwordHash === attemptedHash);
-
-  // If no password matched, select candidate for failed attempt tracking
-  if (!targetUser) {
-    targetUser = candidates[0];
-  }
-
-  if (!targetUser.isActive) return { success: false, error: GENERIC };
-
-  if (targetUser.isLocked) {
-    return {
-      success: false,
-      locked: true,
-      error:
-        'Your account has been locked due to multiple failed login attempts. ' +
-        'Please contact your system administrator to unlock your account.',
-    };
-  }
-
-  if (attemptedHash !== targetUser.passwordHash) {
-    const newCount = targetUser.failedLoginCount + 1;
-    const shouldLock = newCount >= MAX_FAILED;
-    await supabase
-      .from('system_users')
-      .update({ failed_login_count: newCount, is_locked: shouldLock, modified_at: new Date().toISOString() })
-      .eq('id', targetUser.id);
-
-    if (shouldLock) {
+    if (!data?.success || !data.session) {
       return {
         success: false,
-        locked: true,
-        error:
-          `${GENERIC} Your account has been locked after ${MAX_FAILED} failed attempts. ` +
-          'Contact an administrator to unlock.',
+        error: data?.error ?? GENERIC,
+        locked: data?.locked,
       };
     }
-    return { success: false, error: GENERIC };
+
+    clearSession();
+    saveSession(data.session);
+    return {
+      success: true,
+      session: data.session,
+      requiresPasswordChange: data.session.requiresPasswordChange,
+    };
+  } catch (error) {
+    console.error('Login service request failed:', error);
+    return { success: false, error: 'Login service is temporarily unavailable.' };
   }
-
-  const token = randomToken();
-  const now = new Date().toISOString();
-
-  await supabase
-    .from('system_users')
-    .update({ failed_login_count: 0, is_locked: false, last_login: now, modified_at: now })
-    .eq('id', targetUser.id);
-
-  clearSession();
-
-  const session: AuthSession = {
-    userId: targetUser.id,
-    username: targetUser.username,
-    email: targetUser.email,
-    role: targetUser.role,
-    fullName: targetUser.fullName,
-    token,
-    issuedAt: now,
-    requiresPasswordChange: targetUser.requiresPasswordChange,
-  };
-  saveSession(session);
-
-  return { success: true, session, requiresPasswordChange: targetUser.requiresPasswordChange };
 }
 
 export function logout(): void {
+  const session = loadSession();
+  if (session?.token) {
+    void supabase.functions.invoke('ams-api', {
+      body: { action: 'logout' },
+      headers: { Authorization: `Bearer ${session.token}` },
+    }).then(({ error }) => {
+      if (error) console.error('Server-side sign out failed:', error.message);
+    }).catch((error: unknown) => {
+      console.error('Server-side sign out failed:', error);
+    });
+  }
   clearSession();
 }
 

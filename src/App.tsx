@@ -778,7 +778,8 @@ export default function App() {
         })
         .map((scale) => scale.id)
     );
-    await saveAuditDivisionRiskScales(scales);
+    if (!authSession?.token) throw new Error('Sign in again before saving audit division scales.');
+    await saveAuditDivisionRiskScales(scales, authSession.token);
     const modifiedBy = getCurrentAccountEmail();
     const modifiedAt = new Date().toISOString();
     const updatedUniverse = universe.map((entity) => {

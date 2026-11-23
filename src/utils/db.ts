@@ -638,47 +638,27 @@ export async function fetchAuditDivisionRiskScales(): Promise<AuditDivisionRiskS
 }
 
 export async function saveAuditDivisionRiskScales(
-  scales: AuditDivisionRiskScale[]
+  scales: AuditDivisionRiskScale[],
+  sessionToken: string
 ): Promise<void> {
-  const actor = getCurrentAccountEmail();
-  const { data: existing, error: fetchError } = await supabase
-    .from('audit_division_risk_scales')
-    .select('id');
-  if (fetchError) throw new Error(`Could not load existing audit divisions: ${fetchError.message}`);
-
-  if (scales.length > 0) {
-    const now = new Date().toISOString();
-    const { error } = await supabase.from('audit_division_risk_scales').upsert(
-      scales.map((scale) => ({
-        id: scale.id,
-        name: scale.name,
-        high_min_score: scale.highMinScore,
-        medium_min_score: scale.mediumMinScore,
-        high_cycle_months: scale.highCycleMonths,
-        medium_cycle_months: scale.mediumCycleMonths,
-        low_cycle_months: scale.lowCycleMonths,
-        high_fieldwork_weeks: scale.highFieldworkWeeks,
-        medium_fieldwork_weeks: scale.mediumFieldworkWeeks,
-        low_fieldwork_weeks: scale.lowFieldworkWeeks,
-        added_by: scale.addedBy || actor,
-        modified_by: actor,
-        modified_at: now,
-        updated_at: now,
-      }))
-    );
-    if (error) throw new Error(`Could not save audit division scales: ${error.message}`);
+  if (!sessionToken) throw new Error('Could not save audit division scales: sign in again to continue.');
+  const { data, error } = await supabase.functions.invoke<{
+    success: boolean;
+    error?: string;
+  }>('ams-api', {
+    body: { action: 'saveAuditDivisionRiskScales', scales },
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  if (error) {
+    let message = error.message;
+    if (error.context instanceof Response) {
+      const payload = await error.context.clone().json().catch(() => undefined);
+      if (typeof payload?.error === 'string') message = payload.error;
+    }
+    throw new Error(`Could not save audit division scales: ${message}`);
   }
-
-  const retainedIds = new Set(scales.map((scale) => scale.id));
-  const removedIds = (existing ?? [])
-    .map((row) => row.id as string)
-    .filter((id) => !retainedIds.has(id));
-  if (removedIds.length > 0) {
-    const { error } = await supabase
-      .from('audit_division_risk_scales')
-      .delete()
-      .in('id', removedIds);
-    if (error) throw new Error(`Could not remove audit divisions: ${error.message}`);
+  if (!data?.success) {
+    throw new Error(data?.error ?? 'Could not save audit division scales.');
   }
 }
 

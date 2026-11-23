@@ -43,5 +43,8 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
+[functions.ams-api]
+verify_jwt = false
+
 [analytics]
 enabled = false
