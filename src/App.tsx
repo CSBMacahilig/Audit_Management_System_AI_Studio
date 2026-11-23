@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   AuditEngagement,
+  AuditDivisionRiskScale,
   AuditFile,
   AuditFinding,
   EngagementSubTabId,
@@ -47,6 +48,7 @@ import {
   fetchUniverse,
   fetchUserProfiles,
   fetchFrequencies,
+  fetchAuditDivisionRiskScales,
   fetchMasterData,
   upsertEngagement,
   upsertIssue,
@@ -56,6 +58,7 @@ import {
   insertFile,
   insertActivityLog,
   saveFrequencies,
+  saveAuditDivisionRiskScales,
   resetSystemToBaseline,
   saveMasterData,
   upsertUniverseEntity,
@@ -69,6 +72,12 @@ import { SizingConfig } from './data/auditData';
 import { canTransitionEngagementStatus, EngagementStatus } from './utils/brw';
 import { formatIdentifier, formatYearIdentifier } from './utils/identifiers';
 import { getCurrentAccountEmail } from './utils/auditMetadata';
+import {
+  DEFAULT_AUDIT_DIVISION_RISK_SCALES,
+  getAuditCycleMonths,
+  getAuditFieldworkWeeks,
+  getAuditRiskLevel,
+} from './utils/riskScale';
 
 // Fallback profile used when user_profiles table is empty (fresh database)
 const FALLBACK_USER: UserProfile = {
@@ -125,6 +134,9 @@ export default function App() {
   const [engagements, setEngagements] = useState<AuditEngagement[]>([]);
   const [issues, setIssues] = useState<IssueRegisterItem[]>([]);
   const [universe, setUniverse] = useState<UniverseEntity[]>([]);
+  const [auditDivisionRiskScales, setAuditDivisionRiskScales] = useState<AuditDivisionRiskScale[]>(
+    DEFAULT_AUDIT_DIVISION_RISK_SCALES
+  );
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [permissionMatrix, setPermissionMatrix] = useState<RolePermissionMatrixRow[]>(DEFAULT_ROLE_PERMISSIONS_MATRIX);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -165,12 +177,14 @@ export default function App() {
       fetchUniverse(),
       fetchUserProfiles(),
       fetchFrequencies(),
+      fetchAuditDivisionRiskScales(),
       fetchMasterData('app_roles', DEFAULT_ROLE_DEFINITIONS),
       fetchMasterData('role_permissions_matrix', DEFAULT_ROLE_PERMISSIONS_MATRIX),
-    ]).then(([engs, iss, uni, profiles, freq, _roles, matrix]) => {
+    ]).then(([engs, iss, uni, profiles, freq, divisionScales, _roles, matrix]) => {
       setEngagements(engs);
       setIssues(iss);
       setUniverse(uni);
+      setAuditDivisionRiskScales(divisionScales);
       setPermissionMatrix(matrix);
       if (authSession) {
         const matched = profiles.find(
@@ -206,6 +220,11 @@ export default function App() {
   const handleUpdateUniverseEntity = (entity: UniverseEntity) => {
     setUniverse((prev) => prev.map((item) => item.id === entity.id ? entity : item));
     upsertUniverseEntity(entity);
+  };
+
+  const handleUpdateEngagement = (engagement: AuditEngagement) => {
+    setEngagements((prev) => prev.map((item) => item.id === engagement.id ? engagement : item));
+    upsertEngagement(engagement);
   };
 
   const handleDeleteUniverseEntity = (id: string) => {
@@ -730,6 +749,80 @@ export default function App() {
     saveFrequencies(freq);
   };
 
+  const handleSaveAuditDivisionRiskScales = async (scales: AuditDivisionRiskScale[]) => {
+    const retainedIds = new Set(scales.map((scale) => scale.id));
+    const removedIds = auditDivisionRiskScales
+      .filter((scale) => !retainedIds.has(scale.id))
+      .map((scale) => scale.id);
+    const inUse = [...universe, ...engagements].some((record) =>
+      record.auditDivisionId && removedIds.includes(record.auditDivisionId)
+    );
+    if (inUse) {
+      throw new Error('An audit division assigned to an Audit Universe entity or engagement cannot be removed.');
+    }
+    const scaleSettings: (keyof AuditDivisionRiskScale)[] = [
+      'highMinScore',
+      'mediumMinScore',
+      'highCycleMonths',
+      'mediumCycleMonths',
+      'lowCycleMonths',
+      'highFieldworkWeeks',
+      'mediumFieldworkWeeks',
+      'lowFieldworkWeeks',
+    ];
+    const changedScaleIds = new Set(
+      scales
+        .filter((scale) => {
+          const previous = auditDivisionRiskScales.find((item) => item.id === scale.id);
+          return previous && scaleSettings.some((key) => previous[key] !== scale[key]);
+        })
+        .map((scale) => scale.id)
+    );
+    await saveAuditDivisionRiskScales(scales);
+    const modifiedBy = getCurrentAccountEmail();
+    const modifiedAt = new Date().toISOString();
+    const updatedUniverse = universe.map((entity) => {
+      if (!entity.auditDivisionId || !changedScaleIds.has(entity.auditDivisionId)) return entity;
+      const riskLevel = getAuditRiskLevel(entity.riskScore, entity.auditDivisionId, scales);
+      const cycleMonths = getAuditCycleMonths(riskLevel, entity.auditDivisionId, scales, frequencies);
+      const lastAuditDate = new Date(entity.lastAudited);
+      const nextDue = Number.isNaN(lastAuditDate.getTime())
+        ? entity.nextDue
+        : (() => {
+            lastAuditDate.setMonth(lastAuditDate.getMonth() + cycleMonths);
+            return lastAuditDate.toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+          })();
+      const updated = { ...entity, riskLevel, cycleMonths, nextDue, modifiedBy, modifiedAt };
+      upsertUniverseEntity(updated);
+      return updated;
+    });
+    const updatedEngagements = engagements.map((engagement) => {
+      if (!engagement.auditDivisionId || !changedScaleIds.has(engagement.auditDivisionId)) return engagement;
+      const riskLevel = getAuditRiskLevel(engagement.riskScore, engagement.auditDivisionId, scales);
+      const fieldworkWeeks = getAuditFieldworkWeeks(
+        riskLevel,
+        engagement.auditDivisionId,
+        scales
+      );
+      const updated = {
+        ...engagement,
+        riskLevel,
+        fieldworkDayTotal: fieldworkWeeks * 5,
+        modifiedBy,
+        modifiedAt,
+      };
+      upsertEngagement(updated);
+      return updated;
+    });
+    setAuditDivisionRiskScales(scales);
+    setUniverse(updatedUniverse);
+    setEngagements(updatedEngagements);
+  };
+
   const handleResetSystemForUAT = async () => {
     await resetSystemToBaseline();
     const resetChecklist = DEFAULT_SETUP_ITEMS.map((item) => ({
@@ -910,6 +1003,7 @@ export default function App() {
                     name: u.name,
                     subtitle: u.division || u.category,
                     type: (u.category as UniverseRecord['type']) || 'Process',
+                    auditDivisionId: u.auditDivisionId,
                     owner: u.defaultLead || 'Internal Audit',
                     likelihood: u.likelihood,
                     impact: u.impact,
@@ -926,6 +1020,7 @@ export default function App() {
                     modifiedAt: u.modifiedAt,
                   }))}
                   frequencies={frequencies}
+                  auditDivisionRiskScales={auditDivisionRiskScales}
                   isReauditMode={activeLifecycleStage === 7}
                   onAddUniverseEntity={handleAddUniverseEntity}
                   onUpdateUniverseEntity={handleUpdateUniverseEntity}
@@ -938,11 +1033,13 @@ export default function App() {
                   engagements={engagements}
                   universe={universe}
                   userProfiles={userProfiles}
+                  auditDivisionRiskScales={auditDivisionRiskScales}
                   onSelectEngagement={handleSelectEngagement}
                   onAddEngagement={(newEng) => {
                     upsertEngagement(newEng);
                     setEngagements((prev) => [newEng, ...prev]);
                   }}
+                  onUpdateEngagement={handleUpdateEngagement}
                   onUpdateEngagementStatus={handleUpdateEngagementStatus}
                   onAutoAssignLeads={handleAutoAssignLeads}
                   onDraftFromUniverse={handleDraftFromUniverse}
@@ -993,6 +1090,12 @@ export default function App() {
                 <SettingsView
                   frequencies={frequencies}
                   onSaveFrequencies={handleSaveFrequencies}
+                  auditDivisionRiskScales={auditDivisionRiskScales}
+                  assignedAuditDivisionIds={[
+                    ...universe.map((entity) => entity.auditDivisionId),
+                    ...engagements.map((engagement) => engagement.auditDivisionId),
+                  ].filter((id): id is string => Boolean(id))}
+                  onSaveAuditDivisionRiskScales={handleSaveAuditDivisionRiskScales}
                   onSaveSizing={handleSaveSizing}
                   onResetSystemForUAT={handleResetSystemForUAT}
                 />

@@ -19,6 +19,7 @@ import type {
   AuditFinding,
   AuditFile,
   ActivityLogItem,
+  AuditDivisionRiskScale,
   IssueRegisterItem,
   SizingConfig,
   TimelineActivity,
@@ -31,6 +32,7 @@ import {
   normalizeYearIdentifier,
 } from './identifiers';
 import { getCurrentAccountEmail } from './auditMetadata';
+import { DEFAULT_AUDIT_DIVISION_RISK_SCALES } from './riskScale';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Row mappers
@@ -51,6 +53,7 @@ function rowToEngagement(row: any, subs: {
     title: row.title,
     category: row.category,
     department: row.department,
+    auditDivisionId: row.audit_division_id ?? undefined,
     entityName: row.entity_name,
     likelihood: row.likelihood,
     impact: row.impact,
@@ -191,6 +194,7 @@ function rowToUniverse(row: any): UniverseEntity {
     code: normalizeLegacyIdentifier(row.code, 'AU', 1),
     name: row.name,
     division: row.division,
+    auditDivisionId: row.audit_division_id ?? undefined,
     category: row.category,
     likelihood: row.likelihood,
     impact: row.impact,
@@ -285,6 +289,7 @@ export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
     title: eng.title,
     category: eng.category,
     department: eng.department,
+    audit_division_id: eng.auditDivisionId ?? null,
     entity_name: eng.entityName,
     likelihood: eng.likelihood,
     impact: eng.impact,
@@ -477,6 +482,7 @@ export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void
     code: entity.code,
     name: entity.name,
     division: entity.division,
+    audit_division_id: entity.auditDivisionId ?? null,
     category: entity.category,
     likelihood: entity.likelihood,
     impact: entity.impact,
@@ -602,6 +608,78 @@ export async function saveFrequencies(freq: AuditFrequencies): Promise<void> {
     updated_at: new Date().toISOString(),
   });
   if (error) console.error('saveFrequencies:', error.message);
+}
+
+export async function fetchAuditDivisionRiskScales(): Promise<AuditDivisionRiskScale[]> {
+  const { data, error } = await supabase
+    .from('audit_division_risk_scales')
+    .select('*')
+    .order('name');
+  if (error) {
+    console.error('fetchAuditDivisionRiskScales:', error.message);
+    return DEFAULT_AUDIT_DIVISION_RISK_SCALES;
+  }
+  if (!data || data.length === 0) return DEFAULT_AUDIT_DIVISION_RISK_SCALES;
+  return data.map((row) => ({
+    id: row.id,
+    name: row.name,
+    highMinScore: Number(row.high_min_score),
+    mediumMinScore: Number(row.medium_min_score),
+    highCycleMonths: row.high_cycle_months,
+    mediumCycleMonths: row.medium_cycle_months,
+    lowCycleMonths: row.low_cycle_months,
+    highFieldworkWeeks: row.high_fieldwork_weeks,
+    mediumFieldworkWeeks: row.medium_fieldwork_weeks,
+    lowFieldworkWeeks: row.low_fieldwork_weeks,
+    addedBy: row.added_by ?? undefined,
+    modifiedBy: row.modified_by ?? undefined,
+    modifiedAt: row.modified_at ?? undefined,
+  }));
+}
+
+export async function saveAuditDivisionRiskScales(
+  scales: AuditDivisionRiskScale[]
+): Promise<void> {
+  const actor = getCurrentAccountEmail();
+  const { data: existing, error: fetchError } = await supabase
+    .from('audit_division_risk_scales')
+    .select('id');
+  if (fetchError) throw new Error(`Could not load existing audit divisions: ${fetchError.message}`);
+
+  if (scales.length > 0) {
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('audit_division_risk_scales').upsert(
+      scales.map((scale) => ({
+        id: scale.id,
+        name: scale.name,
+        high_min_score: scale.highMinScore,
+        medium_min_score: scale.mediumMinScore,
+        high_cycle_months: scale.highCycleMonths,
+        medium_cycle_months: scale.mediumCycleMonths,
+        low_cycle_months: scale.lowCycleMonths,
+        high_fieldwork_weeks: scale.highFieldworkWeeks,
+        medium_fieldwork_weeks: scale.mediumFieldworkWeeks,
+        low_fieldwork_weeks: scale.lowFieldworkWeeks,
+        added_by: scale.addedBy || actor,
+        modified_by: actor,
+        modified_at: now,
+        updated_at: now,
+      }))
+    );
+    if (error) throw new Error(`Could not save audit division scales: ${error.message}`);
+  }
+
+  const retainedIds = new Set(scales.map((scale) => scale.id));
+  const removedIds = (existing ?? [])
+    .map((row) => row.id as string)
+    .filter((id) => !retainedIds.has(id));
+  if (removedIds.length > 0) {
+    const { error } = await supabase
+      .from('audit_division_risk_scales')
+      .delete()
+      .in('id', removedIds);
+    if (error) throw new Error(`Could not remove audit divisions: ${error.message}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

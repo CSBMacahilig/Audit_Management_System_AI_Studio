@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { formatYearIdentifier, normalizeYearIdentifier } from '../utils/identifiers';
 import { formatAuditDate, getCurrentAccountEmail } from '../utils/auditMetadata';
-import { AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
+import { AuditDivisionRiskScale, AuditEngagement, AuditRiskLevel, UniverseEntity, UserProfile } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
 import { formatDateForDisplay } from '../utils/date';
+import { getAuditFieldworkWeeks, getAuditRiskLevel } from '../utils/riskScale';
 
 const DEFAULT_AUDIT_TYPES = [
   'Financial audit',
@@ -17,8 +18,10 @@ interface AnnualPlanViewProps {
   engagements: AuditEngagement[];
   universe: UniverseEntity[];
   userProfiles: UserProfile[];
+  auditDivisionRiskScales: AuditDivisionRiskScale[];
   onSelectEngagement: (engagement: AuditEngagement) => void;
   onAddEngagement: (newEng: AuditEngagement) => void;
+  onUpdateEngagement: (engagement: AuditEngagement) => void;
   onUpdateEngagementStatus: (engagementId: string, status: string) => void;
   onAutoAssignLeads: () => void;
   onDraftFromUniverse: () => void;
@@ -27,8 +30,10 @@ interface AnnualPlanViewProps {
 export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   engagements,
   userProfiles,
+  auditDivisionRiskScales,
   onSelectEngagement,
   onAddEngagement,
+  onUpdateEngagement,
   onUpdateEngagementStatus,
   onAutoAssignLeads,
   onDraftFromUniverse,
@@ -46,6 +51,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
   const [auditTypes, setAuditTypes] = useState(DEFAULT_AUDIT_TYPES);
   const [auditStatuses, setAuditStatuses] = useState(['Planned', 'Scheduled', 'In progress', 'Reporting', 'Closed', 'Deferred', 'Cancelled']);
   const [newEntity, setNewEntity] = useState('');
+  const [newAuditDivisionId, setNewAuditDivisionId] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(5);
   const [newLead, setNewLead] = useState('A. Villanueva');
@@ -151,10 +157,10 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
 
   const handleCreateAudit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newEntity.trim()) return;
+    if (!newTitle.trim() || !newEntity.trim() || !newAuditDivisionId) return;
     const score = newLikelihood * newImpact;
-    const riskLevel: AuditRiskLevel =
-      score >= 7 ? 'High' : score >= 4 ? 'Medium' : 'Low';
+    const riskLevel = getAuditRiskLevel(score, newAuditDivisionId, auditDivisionRiskScales);
+    const fieldworkWeeks = getAuditFieldworkWeeks(riskLevel, newAuditDivisionId, auditDivisionRiskScales);
     const nextNum = engagements.length + 1;
     const ref = formatYearIdentifier('AE', Number(selectedYear), nextNum);
 
@@ -165,6 +171,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       title: newTitle.trim(),
       category: newCategory,
       department: newCategory,
+      auditDivisionId: newAuditDivisionId,
       entityName: newEntity.trim(),
       likelihood: newLikelihood,
       impact: newImpact,
@@ -182,7 +189,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
       lifecycleStage: 1,
       fieldworkPct: 0,
       fieldworkDayCurrent: 0,
-      fieldworkDayTotal: 26,
+      fieldworkDayTotal: fieldworkWeeks * 5,
       reportStatus: 'Draft',
       reportRef: `IA-${selectedYear}-0${nextNum}-RPT`,
       executiveSummary: `Scheduled audit engagement for ${newEntity.trim()}.`,
@@ -206,6 +213,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
     onAddEngagement(created);
     setNewTitle('');
     setNewEntity('');
+    setNewAuditDivisionId('');
     setShowNewModal(false);
     setBannerMessage(`Added ${created.ref} (${created.title}) to Annual Plan ${selectedYear}.`);
   };
@@ -327,6 +335,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
               <th className="py-2.5 pr-4 w-36">REF</th>
               <th className="py-2.5 px-4">AUDIT</th>
               <th className="py-2.5 px-4">ENTITY &amp; RISK</th>
+              <th className="py-2.5 px-4">AUDIT DIVISION</th>
               <th className="py-2.5 px-4 w-32">LEAD</th>
               <th className="py-2.5 px-4 w-44">DATES</th>
               <th className="py-2.5 pl-4 w-32">STATUS</th>
@@ -365,6 +374,33 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                       </span>
                       <span className="text-xs text-slate-600">{eng.riskLevel}</span>
                     </div>
+                  </td>
+                  <td className="py-3.5 px-4 align-top">
+                    <select
+                      aria-label={`Audit division for ${eng.ref}`}
+                      value={eng.auditDivisionId || ''}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        const auditDivisionId = event.target.value || undefined;
+                        const riskLevel = getAuditRiskLevel(eng.riskScore, auditDivisionId, auditDivisionRiskScales);
+                        const fieldworkWeeks = getAuditFieldworkWeeks(riskLevel, auditDivisionId, auditDivisionRiskScales);
+                        onUpdateEngagement({
+                          ...eng,
+                          auditDivisionId,
+                          riskLevel,
+                          fieldworkDayTotal: fieldworkWeeks * 5,
+                          modifiedBy: getCurrentAccountEmail(),
+                          modifiedAt: new Date().toISOString(),
+                        });
+                      }}
+                      className="max-w-52 px-2 py-1 bg-white border border-slate-300 rounded text-[11px] text-slate-700"
+                    >
+                      <option value="">Unassigned</option>
+                      {auditDivisionRiskScales.map((scale) => (
+                        <option key={scale.id} value={scale.id}>{scale.name}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="py-3.5 px-4 align-top font-medium text-slate-800">
                     {eng.lead || '—'}
@@ -406,7 +442,7 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
 
             {displayedEngagements.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={10} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center max-w-md mx-auto">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -518,6 +554,22 @@ export const AnnualPlanView: React.FC<AnnualPlanViewProps> = ({
                   placeholder="e.g. Bancassurance settlement & commission ledger"
                   className="w-full px-3 py-2 border border-slate-300 rounded-md"
                 />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Audit Division
+                </label>
+                <select
+                  required
+                  value={newAuditDivisionId}
+                  onChange={(e) => setNewAuditDivisionId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white"
+                >
+                  <option value="">Select audit division</option>
+                  {auditDivisionRiskScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>{scale.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

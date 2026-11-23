@@ -7,8 +7,9 @@ import {
   PASSWORD_STRENGTH_LABELS,
   PASSWORD_STRENGTH_COLORS,
 } from '../utils/security';
-import { SizingConfig } from '../data/auditData';
+import { AuditDivisionRiskScale, SizingConfig } from '../data/auditData';
 import { fetchMasterData } from '../utils/db';
+import { DEFAULT_AUDIT_DIVISION_RISK_SCALES } from '../utils/riskScale';
 
 const DEFAULT_SIGNATORY_OPTIONS = [
   'M. Santos – Chief Audit Executive',
@@ -28,6 +29,9 @@ interface SettingsViewProps {
     medium: number;
     low: number;
   }) => void;
+  auditDivisionRiskScales: AuditDivisionRiskScale[];
+  assignedAuditDivisionIds: string[];
+  onSaveAuditDivisionRiskScales: (scales: AuditDivisionRiskScale[]) => Promise<void>;
   onSaveSizing?: (sizing: SizingConfig[]) => void;
   onResetSystemForUAT?: () => Promise<void> | void;
 }
@@ -94,12 +98,22 @@ const DEFAULT_SIZING: EditableSizingRow[] = [
 export const SettingsView: React.FC<SettingsViewProps> = ({
   frequencies,
   onSaveFrequencies,
+  auditDivisionRiskScales,
+  assignedAuditDivisionIds,
+  onSaveAuditDivisionRiskScales,
   onSaveSizing,
   onResetSystemForUAT,
 }) => {
   const [high, setHigh] = useState(frequencies.high);
   const [med, setMed] = useState(frequencies.medium);
   const [low, setLow] = useState(frequencies.low);
+  const [divisionScales, setDivisionScales] = useState(auditDivisionRiskScales);
+  const [selectedDivisionId, setSelectedDivisionId] = useState(auditDivisionRiskScales[0]?.id ?? '');
+  const [divisionDraft, setDivisionDraft] = useState<AuditDivisionRiskScale | null>(
+    auditDivisionRiskScales[0] ?? null
+  );
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [isSavingScales, setIsSavingScales] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -227,6 +241,125 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setSavedNotice(null), 3500);
   };
 
+  useEffect(() => {
+    setDivisionScales(auditDivisionRiskScales);
+    if (!auditDivisionRiskScales.some((scale) => scale.id === selectedDivisionId)) {
+      setSelectedDivisionId(auditDivisionRiskScales[0]?.id ?? '');
+    }
+  }, [auditDivisionRiskScales, selectedDivisionId]);
+
+  useEffect(() => {
+    const selected = divisionScales.find((scale) => scale.id === selectedDivisionId);
+    setDivisionDraft(selected ? { ...selected } : null);
+  }, [divisionScales, selectedDivisionId]);
+
+  const updateDivisionDraft = <K extends keyof AuditDivisionRiskScale>(
+    key: K,
+    value: AuditDivisionRiskScale[K]
+  ) => {
+    setDivisionDraft((current) => current ? { ...current, [key]: value } : current);
+  };
+
+  const handleAddAuditDivision = () => {
+    const name = newDivisionName.trim();
+    if (!name) return;
+    if (divisionScales.some((scale) => scale.name.toLowerCase() === name.toLowerCase())) {
+      notify(`An audit division named "${name}" already exists.`);
+      return;
+    }
+    const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
+    const added = {
+      ...DEFAULT_AUDIT_DIVISION_RISK_SCALES[0],
+      id,
+      name,
+    };
+    setDivisionScales((current) => [...current, added]);
+    setSelectedDivisionId(id);
+    setDivisionDraft(added);
+    setNewDivisionName('');
+  };
+
+  const handleSaveAuditDivisionScales = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!divisionDraft) return;
+    if (!divisionDraft.name.trim()) {
+      notify('Enter an audit division name.');
+      return;
+    }
+    if (divisionScales.some((scale) =>
+      scale.id !== divisionDraft.id && scale.name.toLowerCase() === divisionDraft.name.trim().toLowerCase()
+    )) {
+      notify(`An audit division named "${divisionDraft.name}" already exists.`);
+      return;
+    }
+    if (
+      divisionDraft.mediumMinScore < 0 ||
+      divisionDraft.highMinScore <= divisionDraft.mediumMinScore ||
+      divisionDraft.highMinScore > 10
+    ) {
+      notify('Score bands must be ordered: 0 ≤ Medium minimum < High minimum ≤ 10.');
+      return;
+    }
+    const positiveValues = [
+      divisionDraft.highCycleMonths,
+      divisionDraft.mediumCycleMonths,
+      divisionDraft.lowCycleMonths,
+      divisionDraft.highFieldworkWeeks,
+      divisionDraft.mediumFieldworkWeeks,
+      divisionDraft.lowFieldworkWeeks,
+    ];
+    if (positiveValues.some((value) => !Number.isInteger(value) || value < 1) ||
+      [divisionDraft.highCycleMonths, divisionDraft.mediumCycleMonths, divisionDraft.lowCycleMonths]
+        .some((value) => value > 60) ||
+      [divisionDraft.highFieldworkWeeks, divisionDraft.mediumFieldworkWeeks, divisionDraft.lowFieldworkWeeks]
+        .some((value) => value > 52)
+    ) {
+      notify('Audit cycles must be 1–60 months and fieldwork durations 1–52 weeks.');
+      return;
+    }
+    const next = divisionScales.map((scale) =>
+      scale.id === divisionDraft.id
+        ? { ...divisionDraft, name: divisionDraft.name.trim() }
+        : scale
+    );
+    setIsSavingScales(true);
+    try {
+      await onSaveAuditDivisionRiskScales(next);
+      setDivisionScales(next);
+      notify(`Risk scale saved for ${divisionDraft.name.trim()}.`);
+    } catch (error) {
+      console.error('Unable to save audit division risk scales:', error);
+      notify(error instanceof Error ? error.message : 'Unable to save audit division risk scales.');
+    } finally {
+      setIsSavingScales(false);
+    }
+  };
+
+  const handleRemoveAuditDivision = async () => {
+    if (!divisionDraft) return;
+    if (divisionScales.length <= 1) {
+      notify('At least one audit division must remain configured.');
+      return;
+    }
+    if (assignedAuditDivisionIds.includes(divisionDraft.id)) {
+      notify('This division is assigned to an Audit Universe entity or engagement and cannot be removed.');
+      return;
+    }
+    const next = divisionScales.filter((scale) => scale.id !== divisionDraft.id);
+    setIsSavingScales(true);
+    try {
+      await onSaveAuditDivisionRiskScales(next);
+      setDivisionScales(next);
+      setSelectedDivisionId(next[0].id);
+      notify(`Audit division "${divisionDraft.name}" removed.`);
+    } catch (error) {
+      console.error('Unable to remove audit division:', error);
+      notify(error instanceof Error ? error.message : 'Unable to remove audit division.');
+    } finally {
+      setIsSavingScales(false);
+    }
+  };
+
   const handleSaveFrequencies = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveFrequencies({ high, medium: med, low });
@@ -271,11 +404,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* Left Card: Audit frequency by risk rating */}
         <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
           <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
-            Audit frequency by risk rating
+            Fallback frequency for unassigned entities
           </h2>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            How often each entity should be audited. Next due date = last completed audit +
-            this many months.
+            Used only until an entity or engagement is assigned to an audit division.
+            Division-specific audit cycles are configured in the risk scale table.
           </p>
 
           <form onSubmit={handleSaveFrequencies} className="mt-5">
@@ -312,68 +445,178 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </form>
         </div>
 
-        {/* Right Card: Risk rating scale */}
+        {/* Right Card: Per-division risk rating scale */}
         <div className="bg-white rounded-lg border border-slate-200/90 shadow-2xs p-6">
           <h2 className="text-[18px] font-bold text-slate-900 tracking-tight">
-            Risk rating scale
+            Risk rating scale by audit division
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Composite weighted risk score is a 1.00–10.00 scale; legacy matrix inputs remain supported.
+            Each division has its own score cutoffs, audit cycles, and default fieldwork duration. Assign a division in Audit Universe and Annual Audit Plan to apply its scale.
           </p>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-2.5 pr-4">RATING</th>
-                  <th className="py-2.5 px-4">SCORE</th>
-                  <th className="py-2.5 px-4">DEFAULT CYCLE</th>
-                  <th className="py-2.5 pl-4">DEFAULT FIELDWORK</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200/80 text-[13px] tabular-nums">
-                {[
-                  {
-                    rating: 'High',
-                    score: '7.00–10.00',
-                    color: 'bg-[#D97724]',
-                    cycle: `${high} months`,
-                    fw: '5 weeks',
-                  },
-                  {
-                    rating: 'Medium',
-                    score: '4.00–below 7.00',
-                    color: 'bg-[#C99E2C]',
-                    cycle: `${med} months`,
-                    fw: '4 weeks',
-                  },
-                  {
-                    rating: 'Low',
-                    score: 'Below 4.00',
-                    color: 'bg-[#519E66]',
-                    cycle: `${low} months`,
-                    fw: '3 weeks',
-                  },
-                ].map((r) => (
-                  <tr key={r.rating}>
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded ${r.color} text-white text-xs font-bold font-mono-tabular`}
-                        >
-                          {r.score}
-                        </span>
-                        <span className="text-slate-900 font-medium">{r.rating}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-800 font-medium">{r.score}</td>
-                    <td className="py-3 px-4 text-slate-800">{r.cycle}</td>
-                    <td className="py-3 pl-4 text-slate-800">{r.fw}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <form onSubmit={handleSaveAuditDivisionScales} className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[220px]">
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Audit division
+                </label>
+                <select
+                  value={selectedDivisionId}
+                  onChange={(event) => setSelectedDivisionId(event.target.value)}
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900 focus:outline-none focus:border-[#492785]"
+                >
+                  {divisionScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>{scale.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex-1 min-w-[220px]">
+                <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                  Add audit division
+                </label>
+                <input
+                  value={newDivisionName}
+                  onChange={(event) => setNewDivisionName(event.target.value)}
+                  placeholder="Division name"
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:border-[#492785]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddAuditDivision}
+                className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-md border border-slate-300 cursor-pointer"
+              >
+                Add division
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveAuditDivision}
+                disabled={!divisionDraft || assignedAuditDivisionIds.includes(divisionDraft.id) || divisionScales.length <= 1 || isSavingScales}
+                className="px-3.5 py-2.5 bg-white hover:bg-rose-50 text-rose-700 text-xs font-semibold rounded-md border border-rose-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Remove division
+              </button>
+            </div>
+
+            {divisionDraft ? (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                    Division name
+                  </label>
+                  <input
+                    value={divisionDraft.name}
+                    onChange={(event) => updateDivisionDraft('name', event.target.value)}
+                    required
+                    className="w-full max-w-md px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-[#492785]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                      Medium minimum score (0–10)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={9.9}
+                      step={0.1}
+                      value={divisionDraft.mediumMinScore}
+                      onChange={(event) => updateDivisionDraft('mediumMinScore', Number(event.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                      High minimum score (0–10)
+                    </label>
+                    <input
+                      type="number"
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      value={divisionDraft.highMinScore}
+                      onChange={(event) => updateDivisionDraft('highMinScore', Number(event.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-xs text-slate-900 tabular-nums focus:outline-none focus:border-[#492785]"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                        <th className="py-2 pr-3">Rating</th>
+                        <th className="py-2 px-3">Score band</th>
+                        <th className="py-2 px-3">Audit cycle (months)</th>
+                        <th className="py-2 pl-3">Default fieldwork (weeks)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/80 text-xs">
+                      {([
+                        {
+                          rating: 'High',
+                          band: `${divisionDraft.highMinScore}–10`,
+                          cycleKey: 'highCycleMonths',
+                          fieldworkKey: 'highFieldworkWeeks',
+                          color: 'text-[#B8500B]',
+                        },
+                        {
+                          rating: 'Medium',
+                          band: `${divisionDraft.mediumMinScore}–<${divisionDraft.highMinScore}`,
+                          cycleKey: 'mediumCycleMonths',
+                          fieldworkKey: 'mediumFieldworkWeeks',
+                          color: 'text-[#9A7615]',
+                        },
+                        {
+                          rating: 'Low',
+                          band: `<${divisionDraft.mediumMinScore}`,
+                          cycleKey: 'lowCycleMonths',
+                          fieldworkKey: 'lowFieldworkWeeks',
+                          color: 'text-emerald-700',
+                        },
+                      ] as const).map((row) => (
+                        <tr key={row.rating}>
+                          <td className={`py-2.5 pr-3 font-semibold ${row.color}`}>{row.rating}</td>
+                          <td className="py-2.5 px-3 tabular-nums text-slate-700">{row.band}</td>
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="number"
+                              min={1}
+                              max={60}
+                              value={divisionDraft[row.cycleKey]}
+                              onChange={(event) => updateDivisionDraft(row.cycleKey, Number(event.target.value))}
+                              className="w-24 px-2 py-1.5 border border-slate-300 rounded text-xs tabular-nums"
+                            />
+                          </td>
+                          <td className="py-2.5 pl-3">
+                            <input
+                              type="number"
+                              min={1}
+                              max={52}
+                              value={divisionDraft[row.fieldworkKey]}
+                              onChange={(event) => updateDivisionDraft(row.fieldworkKey, Number(event.target.value))}
+                              className="w-24 px-2 py-1.5 border border-slate-300 rounded text-xs tabular-nums"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSavingScales}
+                  className="px-4 py-2.5 bg-[#492785] hover:bg-[#3b1f6b] text-white text-xs font-semibold rounded-md disabled:opacity-60 cursor-pointer"
+                >
+                  {isSavingScales ? 'Saving…' : 'Save division scale'}
+                </button>
+              </>
+            ) : (
+              <p className="text-xs text-slate-500">Add an audit division to configure its risk scale.</p>
+            )}
+          </form>
         </div>
       </div>
 

@@ -310,6 +310,22 @@ export type RiskLevel = 'Critical' | 'High' | 'Medium' | 'Low';
 export type AuditRiskLevel = 'High' | 'Medium' | 'Low';
 export type AuditStatus = string;
 
+export interface AuditDivisionRiskScale {
+  id: string;
+  name: string;
+  highMinScore: number;
+  mediumMinScore: number;
+  highCycleMonths: number;
+  mediumCycleMonths: number;
+  lowCycleMonths: number;
+  highFieldworkWeeks: number;
+  mediumFieldworkWeeks: number;
+  lowFieldworkWeeks: number;
+  addedBy?: string;
+  modifiedBy?: string;
+  modifiedAt?: string;
+}
+
 export interface WorkingNote {
   id: string;
   ref: string;
@@ -380,6 +396,7 @@ export interface AuditEngagement {
   title: string;
   category: string;
   department: string;
+  auditDivisionId?: string;
   entityName: string;
   likelihood: number;
   impact: number;
@@ -1396,6 +1413,7 @@ export interface UniverseEntity {
   code: string;
   name: string;
   division: string;
+  auditDivisionId?: string;
   category: string;
   likelihood: number;
   impact: number;
@@ -1598,6 +1616,7 @@ export interface UniverseRecord {
   name: string;
   subtitle: string;
   type: string;
+  auditDivisionId?: string;
   owner: string;
   likelihood: number;
   impact: number;

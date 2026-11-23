@@ -12,6 +12,7 @@ import {
   LifecycleStageId,
   MainTabId,
   AuditRiskLevel,
+  AuditDivisionRiskScale,
   RiskLevel,
   UniverseEntity,
   UniverseRecord,
@@ -36,6 +37,7 @@ import {
 } from '../utils/security';
 import { createOrSyncSystemUser } from '../utils/authStore';
 import { formatDateForDisplay, toDateInputValue } from '../utils/date';
+import { getAuditCycleMonths, getAuditRiskLevel } from '../utils/riskScale';
 import {
   APP_ROLES,
   AppRole,
@@ -439,6 +441,7 @@ export const AuditUniverseView: React.FC<{
   universe: UniverseEntity[];
   universeRecords: UniverseRecord[];
   frequencies: { high: number; medium: number; low: number };
+  auditDivisionRiskScales: AuditDivisionRiskScale[];
   isReauditMode?: boolean;
   onAddUniverseEntity?: (entity: UniverseEntity) => void;
   onUpdateUniverseEntity?: (entity: UniverseEntity) => void;
@@ -446,6 +449,7 @@ export const AuditUniverseView: React.FC<{
 }> = ({
   universe,
   frequencies,
+  auditDivisionRiskScales,
   universeRecords,
   onAddUniverseEntity,
   onUpdateUniverseEntity,
@@ -497,6 +501,7 @@ export const AuditUniverseView: React.FC<{
   const [newOwner, setNewOwner] = useState(
     `${DEFAULT_AUDITEE_DIRECTORY[0].head} (${DEFAULT_AUDITEE_DIRECTORY[0].unit})`
   );
+  const [newAuditDivisionId, setNewAuditDivisionId] = useState('');
   const [newLikelihood, setNewLikelihood] = useState(4);
   const [newImpact, setNewImpact] = useState(4);
   const [newRiskScore, setNewRiskScore] = useState(16);
@@ -509,6 +514,7 @@ export const AuditUniverseView: React.FC<{
   const [editSubtitle, setEditSubtitle] = useState('');
   const [editType, setEditType] = useState<UniverseRecord['type']>('Process');
   const [editOwner, setEditOwner] = useState('');
+  const [editAuditDivisionId, setEditAuditDivisionId] = useState('');
   const [editLikelihood, setEditLikelihood] = useState(4);
   const [editImpact, setEditImpact] = useState(4);
   const [editRiskScore, setEditRiskScore] = useState(16);
@@ -517,17 +523,11 @@ export const AuditUniverseView: React.FC<{
   const [editNextDue, setEditNextDue] = useState('');
   const [editNextDueStatus, setEditNextDueStatus] = useState<'Overdue' | 'Due soon' | 'On track'>('On track');
 
-  const calculateRiskLevel = (score: number): AuditRiskLevel => {
-    if (score >= 7) return 'High';
-    if (score >= 4) return 'Medium';
-    return 'Low';
-  };
+  const calculateRiskLevel = (score: number, divisionId = ''): AuditRiskLevel =>
+    getAuditRiskLevel(score, divisionId, auditDivisionRiskScales);
 
-  const getCycleMonths = (level: AuditRiskLevel): number => {
-    if (level === 'High') return frequencies.high;
-    if (level === 'Medium') return frequencies.medium;
-    return frequencies.low;
-  };
+  const getCycleMonths = (level: AuditRiskLevel, divisionId = ''): number =>
+    getAuditCycleMonths(level, divisionId, auditDivisionRiskScales, frequencies);
 
   const formatDateDisplay = (dateStr: string): string => {
     return formatDateForDisplay(dateStr) || '—';
@@ -553,6 +553,7 @@ export const AuditUniverseView: React.FC<{
     setEditSubtitle(rec.subtitle);
     setEditType(rec.type);
     setEditOwner(rec.owner);
+    setEditAuditDivisionId(rec.auditDivisionId || '');
     setEditLikelihood(rec.likelihood);
     setEditImpact(rec.impact);
     setEditRiskScore(rec.riskScore);
@@ -577,15 +578,15 @@ export const AuditUniverseView: React.FC<{
 
   const handleAddEntity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || !newAuditDivisionId) return;
     const nextSequence = nextIdentifierSequence(
       records.map((record) => ({ id: record.id })),
       'AU'
     );
     const identifier = formatIdentifier('AU', nextSequence);
     const score = Number(newRiskScore) || (newLikelihood * newImpact);
-    const riskLevel: AuditRiskLevel = calculateRiskLevel(score);
-    const cycleMonths = getCycleMonths(riskLevel);
+    const riskLevel: AuditRiskLevel = calculateRiskLevel(score, newAuditDivisionId);
+    const cycleMonths = getCycleMonths(riskLevel, newAuditDivisionId);
     const formattedLastAudit = formatDateDisplay(newLastAudit);
     const nextDue = computeNextDueDate(newLastAudit, cycleMonths);
 
@@ -595,6 +596,7 @@ export const AuditUniverseView: React.FC<{
       name: newName.trim(),
       subtitle: newSubtitle.trim(),
       type: newType,
+      auditDivisionId: newAuditDivisionId,
       owner: newOwner.trim(),
       likelihood: newLikelihood,
       impact: newImpact,
@@ -617,6 +619,7 @@ export const AuditUniverseView: React.FC<{
         name: added.name,
         division: added.subtitle,
         category: added.type,
+        auditDivisionId: added.auditDivisionId,
         likelihood: added.likelihood,
         impact: added.impact,
         riskScore: added.riskScore,
@@ -633,6 +636,7 @@ export const AuditUniverseView: React.FC<{
 
     setNewName('');
     setScoreOverridden(false);
+    setNewAuditDivisionId('');
     setShowAddModal(false);
   };
 
@@ -641,8 +645,8 @@ export const AuditUniverseView: React.FC<{
     if (!editingRecord || !editName.trim()) return;
 
     const score = Number(editRiskScore) || (editLikelihood * editImpact);
-    const riskLevel: AuditRiskLevel = calculateRiskLevel(score);
-    const cycleMonths = editCycleMonths || getCycleMonths(riskLevel);
+    const riskLevel: AuditRiskLevel = calculateRiskLevel(score, editAuditDivisionId);
+    const cycleMonths = editCycleMonths || getCycleMonths(riskLevel, editAuditDivisionId);
     const formattedLastAudit = formatDateDisplay(editLastAudit);
     const nextDue = editNextDue.trim()
       ? formatDateDisplay(editNextDue)
@@ -654,6 +658,7 @@ export const AuditUniverseView: React.FC<{
       name: editName.trim(),
       subtitle: editSubtitle.trim(),
       type: editType,
+      auditDivisionId: editAuditDivisionId || undefined,
       owner: editOwner.trim(),
       likelihood: editLikelihood,
       impact: editImpact,
@@ -677,6 +682,7 @@ export const AuditUniverseView: React.FC<{
         name: updated.name,
         division: updated.subtitle,
         category: updated.type,
+        auditDivisionId: updated.auditDivisionId,
         likelihood: updated.likelihood,
         impact: updated.impact,
         riskScore: updated.riskScore,
@@ -770,6 +776,7 @@ export const AuditUniverseView: React.FC<{
               <th className="py-2.5 pr-4">ID</th>
               <th className="py-2.5 pr-4">ENTITY</th>
               <th className="py-2.5 px-4">TYPE</th>
+              <th className="py-2.5 px-4">AUDIT DIVISION</th>
               <th className="py-2.5 px-4">OWNER</th>
               <th className="py-2.5 px-4">L × I</th>
               <th className="py-2.5 px-4">RISK</th>
@@ -789,12 +796,10 @@ export const AuditUniverseView: React.FC<{
                 'AU',
                 index + 1
               );
-              const cycle =
-                rec.riskLevel === 'High'
-                  ? frequencies.high
-                  : rec.riskLevel === 'Medium'
-                  ? frequencies.medium
-                  : frequencies.low;
+              const cycle = getCycleMonths(rec.riskLevel, rec.auditDivisionId);
+              const divisionName = auditDivisionRiskScales.find(
+                (scale) => scale.id === rec.auditDivisionId
+              )?.name;
 
               return (
                 <tr key={rec.id} className="hover:bg-slate-50/70 transition-colors">
@@ -809,6 +814,7 @@ export const AuditUniverseView: React.FC<{
                     <div className="text-xs text-slate-500 mt-0.5">{rec.subtitle}</div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-700">{rec.type}</td>
+                  <td className="py-3.5 px-4 text-slate-700">{divisionName || 'Unassigned'}</td>
                   <td className="py-3.5 px-4 text-slate-800">{rec.owner}</td>
                   <td className="py-3.5 px-4 font-mono-tabular text-xs font-semibold text-slate-800">
                     {rec.likelihood} × {rec.impact} = {rec.riskScore}
@@ -880,7 +886,7 @@ export const AuditUniverseView: React.FC<{
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-12 text-center">
+                <td colSpan={14} className="py-12 text-center">
                   <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -952,6 +958,35 @@ export const AuditUniverseView: React.FC<{
                 >
                   {dynamicCategories.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Audit Division
+                </label>
+                <select
+                  value={editAuditDivisionId}
+                  onChange={(e) => {
+                    const divisionId = e.target.value;
+                    setEditAuditDivisionId(divisionId);
+                    const cycleMonths = getCycleMonths(
+                      calculateRiskLevel(editRiskScore, divisionId),
+                      divisionId
+                    );
+                    setEditCycleMonths(cycleMonths);
+                    const lastAuditDate = new Date(`${editLastAudit}T00:00:00`);
+                    if (!Number.isNaN(lastAuditDate.getTime())) {
+                      lastAuditDate.setMonth(lastAuditDate.getMonth() + cycleMonths);
+                      setEditNextDue(lastAuditDate.toISOString().slice(0, 10));
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                >
+                  <option value="">Unassigned (use fallback scale)</option>
+                  {auditDivisionRiskScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>{scale.name}</option>
                   ))}
                 </select>
               </div>
@@ -1040,7 +1075,7 @@ export const AuditUniverseView: React.FC<{
                     Risk Score (Auditor Defined)
                   </label>
                   {(() => {
-                    const level = calculateRiskLevel(newRiskScore);
+                    const level = calculateRiskLevel(newRiskScore, newAuditDivisionId);
                     return (
                       <span
                         className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${
@@ -1096,7 +1131,7 @@ export const AuditUniverseView: React.FC<{
                   className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
-                  Next audit due will be automatically scheduled from this date based on {calculateRiskLevel(newRiskScore)} risk cycle.
+                  Next audit due will be automatically scheduled from this date based on {calculateRiskLevel(newRiskScore, newAuditDivisionId)} risk cycle.
                 </span>
               </div>
 
@@ -1164,6 +1199,28 @@ export const AuditUniverseView: React.FC<{
                   )}
                   {dynamicCategories.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Audit Division
+                </label>
+                <select
+                  value={editAuditDivisionId}
+                  onChange={(e) => {
+                    const divisionId = e.target.value;
+                    setEditAuditDivisionId(divisionId);
+                    setEditCycleMonths(
+                      getCycleMonths(calculateRiskLevel(editRiskScore, divisionId), divisionId)
+                    );
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-xs text-slate-800 focus:outline-none focus:border-[#492785]"
+                >
+                  <option value="">Unassigned (use fallback scale)</option>
+                  {auditDivisionRiskScales.map((scale) => (
+                    <option key={scale.id} value={scale.id}>{scale.name}</option>
                   ))}
                 </select>
               </div>
@@ -1246,7 +1303,7 @@ export const AuditUniverseView: React.FC<{
                     Risk Score (Auditor Defined)
                   </label>
                   {(() => {
-                    const level = calculateRiskLevel(editRiskScore);
+                    const level = calculateRiskLevel(editRiskScore, editAuditDivisionId);
                     return (
                       <span
                         className={`px-2 py-0.5 rounded text-[11px] font-bold text-white ${
