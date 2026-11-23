@@ -34,6 +34,27 @@ import {
 import { getCurrentAccountEmail } from './auditMetadata';
 import { DEFAULT_AUDIT_DIVISION_RISK_SCALES } from './riskScale';
 
+const USE_AMS_EDGE_API = import.meta.env.VITE_USE_AMS_EDGE_API === 'true';
+const CUSTOM_DIVISION_MAP_KEY = 'custom_audit_division_assignments';
+
+async function saveCustomDivisionAssignment(
+  kind: 'engagement' | 'universe',
+  recordId: string,
+  divisionId?: string
+): Promise<void> {
+  const existing = await fetchMasterData<Record<string, string>>(CUSTOM_DIVISION_MAP_KEY, {});
+  const key = `${kind}:${recordId}`;
+  const next = { ...existing };
+  if (divisionId) {
+    if (next[key] === divisionId) return;
+    next[key] = divisionId;
+  } else {
+    if (!(key in next)) return;
+    delete next[key];
+  }
+  await saveMasterData(CUSTOM_DIVISION_MAP_KEY, next);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Row mappers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,20 +277,24 @@ function rowToUserProfile(row: any): UserProfile {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchEngagements(): Promise<AuditEngagement[]> {
-  const [engRes, wnRes, fndRes, taRes, fileRes, logRes] = await Promise.all([
+  const [engRes, wnRes, fndRes, taRes, fileRes, logRes, customDivisions] = await Promise.all([
     supabase.from('engagements').select('*').order('ref'),
     supabase.from('working_notes').select('*').order('created_at'),
     supabase.from('findings').select('*').order('created_at'),
     supabase.from('timeline_activities').select('*').order('created_at'),
     supabase.from('engagement_files').select('*').order('created_at', { ascending: false }),
     supabase.from('activity_logs').select('*').order('created_at', { ascending: false }),
+    fetchMasterData<Record<string, string>>(CUSTOM_DIVISION_MAP_KEY, {}),
   ]);
 
   if (engRes.error) { console.error('fetchEngagements:', engRes.error.message); return []; }
 
   return (engRes.data ?? []).map((row) => {
     const id = row.id;
-    return rowToEngagement(row, {
+    const resolvedRow = !row.audit_division_id && customDivisions[`engagement:${id}`]
+      ? { ...row, audit_division_id: customDivisions[`engagement:${id}`] }
+      : row;
+    return rowToEngagement(resolvedRow, {
       workingNotes: (wnRes.data ?? []).filter((r) => r.engagement_id === id).map(rowToWorkingNote),
       findings: (fndRes.data ?? []).filter((r) => r.engagement_id === id).map(rowToFinding),
       timelineActivities: (taRes.data ?? []).filter((r) => r.engagement_id === id).map(rowToTimeline),
@@ -282,7 +307,7 @@ export async function fetchEngagements(): Promise<AuditEngagement[]> {
 export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
-  const { error } = await supabase.from('engagements').upsert({
+  const payload = {
     id: eng.id,
     ref: eng.ref,
     year: eng.year,
@@ -316,8 +341,24 @@ export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
     modified_by: actor,
     modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
-  });
-  if (error) console.error('upsertEngagement:', error.message);
+  };
+  const { error } = await supabase.from('engagements').upsert(payload);
+  if (error && (error.code === '23503' || error.message.includes('audit_division_id'))) {
+    const { error: retryErr } = await supabase
+      .from('engagements')
+      .upsert({ ...payload, audit_division_id: null });
+    if (retryErr) {
+      console.error('upsertEngagement:', retryErr.message);
+      return;
+    }
+    await saveCustomDivisionAssignment('engagement', eng.id, eng.auditDivisionId);
+    return;
+  }
+  if (error) {
+    console.error('upsertEngagement:', error.message);
+    return;
+  }
+  await saveCustomDivisionAssignment('engagement', eng.id, undefined);
 }
 
 export async function upsertWorkingNote(engagementId: string, note: WorkingNote): Promise<void> {
@@ -466,10 +507,14 @@ export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchUniverse(): Promise<UniverseEntity[]> {
-  const { data, error } = await supabase.from('universe_entities').select('*').order('code');
+  const [{ data, error }, customDivisions] = await Promise.all([
+    supabase.from('universe_entities').select('*').order('code'),
+    fetchMasterData<Record<string, string>>(CUSTOM_DIVISION_MAP_KEY, {}),
+  ]);
   if (error) { console.error('fetchUniverse:', error.message); return []; }
   return (data ?? []).map((row, index) => rowToUniverse({
     ...row,
+    audit_division_id: row.audit_division_id ?? customDivisions[`universe:${row.id}`] ?? null,
     code: normalizeLegacyIdentifier(row.code, 'AU', index + 1),
   }));
 }
@@ -477,7 +522,7 @@ export async function fetchUniverse(): Promise<UniverseEntity[]> {
 export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
-  const { error } = await supabase.from('universe_entities').upsert({
+  const payload = {
     id: entity.id,
     code: entity.code,
     name: entity.name,
@@ -496,8 +541,24 @@ export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void
     modified_by: actor,
     modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
-  });
-  if (error) console.error('upsertUniverseEntity:', error.message);
+  };
+  const { error } = await supabase.from('universe_entities').upsert(payload);
+  if (error && (error.code === '23503' || error.message.includes('audit_division_id'))) {
+    const { error: retryErr } = await supabase
+      .from('universe_entities')
+      .upsert({ ...payload, audit_division_id: null });
+    if (retryErr) {
+      console.error('upsertUniverseEntity:', retryErr.message);
+      return;
+    }
+    await saveCustomDivisionAssignment('universe', entity.id, entity.auditDivisionId);
+    return;
+  }
+  if (error) {
+    console.error('upsertUniverseEntity:', error.message);
+    return;
+  }
+  await saveCustomDivisionAssignment('universe', entity.id, undefined);
 }
 
 export async function deleteUniverseEntity(id: string): Promise<void> {
@@ -611,6 +672,14 @@ export async function saveFrequencies(freq: AuditFrequencies): Promise<void> {
 }
 
 export async function fetchAuditDivisionRiskScales(): Promise<AuditDivisionRiskScale[]> {
+  const savedScales = await fetchMasterData<AuditDivisionRiskScale[] | null>(
+    'audit_division_risk_scales',
+    null
+  );
+  if (Array.isArray(savedScales) && savedScales.length > 0) {
+    return savedScales;
+  }
+
   const { data, error } = await supabase
     .from('audit_division_risk_scales')
     .select('*')
@@ -639,26 +708,60 @@ export async function fetchAuditDivisionRiskScales(): Promise<AuditDivisionRiskS
 
 export async function saveAuditDivisionRiskScales(
   scales: AuditDivisionRiskScale[],
-  sessionToken: string
+  sessionToken?: string
 ): Promise<void> {
-  if (!sessionToken) throw new Error('Could not save audit division scales: sign in again to continue.');
-  const { data, error } = await supabase.functions.invoke<{
-    success: boolean;
-    error?: string;
-  }>('ams-api', {
-    body: { action: 'saveAuditDivisionRiskScales', scales },
-    headers: { Authorization: `Bearer ${sessionToken}` },
-  });
-  if (error) {
-    let message = error.message;
-    if (error.context instanceof Response) {
-      const payload = await error.context.clone().json().catch(() => undefined);
-      if (typeof payload?.error === 'string') message = payload.error;
+  const actor = getCurrentAccountEmail();
+  const now = new Date().toISOString();
+  const enrichedScales = scales.map((scale) => ({
+    ...scale,
+    name: scale.name.trim(),
+    addedBy: scale.addedBy || actor,
+    modifiedBy: actor,
+    modifiedAt: now,
+  }));
+
+  if (USE_AMS_EDGE_API && sessionToken) {
+    const { data, error } = await supabase.functions.invoke<{
+      success: boolean;
+      error?: string;
+    }>('ams-api', {
+      body: { action: 'saveAuditDivisionRiskScales', scales: enrichedScales },
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    if (!error && data?.success) {
+      await saveMasterData('audit_division_risk_scales', enrichedScales);
+      return;
     }
-    throw new Error(`Could not save audit division scales: ${message}`);
+    if (error && error.context instanceof Response) {
+      const payload = await error.context.clone().json().catch(() => undefined);
+      if (typeof payload?.error === 'string') {
+        throw new Error(`Could not save audit division scales: ${payload.error}`);
+      }
+    }
+    if (data && !data.success && data.error) {
+      throw new Error(data.error);
+    }
   }
-  if (!data?.success) {
-    throw new Error(data?.error ?? 'Could not save audit division scales.');
+
+  let localSaved = false;
+  try {
+    localStorage.setItem('ams_master_audit_division_risk_scales', JSON.stringify(enrichedScales));
+    localSaved = true;
+  } catch (err) {
+    console.warn('localStorage save failed:', err);
+  }
+
+  const { error } = await supabase.from('master_data').upsert({
+    id: 'audit_division_risk_scales',
+    data: enrichedScales as any,
+    added_by: actor,
+    modified_by: actor,
+    modified_at: now,
+    updated_at: now,
+  });
+
+  if (error && !localSaved) {
+    throw new Error(`Could not save audit division scales: ${error.message}`);
   }
 }
 

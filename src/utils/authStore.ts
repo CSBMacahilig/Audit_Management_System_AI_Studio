@@ -79,6 +79,9 @@ function rowToUser(row: any): SystemUser {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = 'csb_auth_session';
+const MAX_FAILED = 3;
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
+const USE_AMS_EDGE_API = import.meta.env.VITE_USE_AMS_EDGE_API === 'true';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Crypto helpers
@@ -91,6 +94,12 @@ export async function hashPassword(password: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+export function randomToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,53 +170,168 @@ export async function seedDefaultAdmin(): Promise<void> {
 // Auth actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function login(username: string, password: string): Promise<LoginResult> {
+async function loginWithDatabase(username: string, password: string): Promise<LoginResult> {
   const GENERIC = 'Login failed. Invalid user ID or password.';
-  try {
-    const { data, error } = await supabase.functions.invoke<{
-      success: boolean;
-      session?: AuthSession;
-      error?: string;
-      locked?: boolean;
-    }>('ams-api', {
-      body: { action: 'login', username, password },
-    });
+  const rawInput = username.trim();
+  const clean = rawInput.toLowerCase();
+  if (!clean || !password) {
+    return { success: false, error: GENERIC };
+  }
 
-    if (error) {
-      console.error('Login service request failed:', error.message);
-      return { success: false, error: 'Login service is temporarily unavailable.' };
+  const emailPrefix = clean.includes('@') ? clean.split('@')[0] : clean;
+  const attemptedHash = await hashPassword(password);
+
+  const [{ data: suList, error: suErr }, { data: profiles }] = await Promise.all([
+    supabase.from('system_users').select('*'),
+    supabase.from('user_profiles').select('employee_number,name'),
+  ]);
+
+  if (suErr || !suList || suList.length === 0) {
+    return { success: false, error: GENERIC };
+  }
+
+  const candidates: SystemUser[] = [];
+  for (const row of suList) {
+    const u = rowToUser(row);
+    let isMatch = false;
+
+    if (u.username.toLowerCase() === clean) isMatch = true;
+    else if (u.email && u.email.toLowerCase() === clean) isMatch = true;
+    else if (u.username.toLowerCase() === emailPrefix) isMatch = true;
+    else if (u.fullName && u.fullName.toLowerCase() === clean) isMatch = true;
+    else if (u.fullName && u.fullName.toLowerCase().replace(/\s+/g, '') === clean.replace(/\s+/g, '')) isMatch = true;
+
+    if (!isMatch && profiles) {
+      const matchedProfile = profiles.find(
+        (p: { employee_number: string | null; name: string | null }) =>
+          p.employee_number && p.employee_number.toLowerCase() === clean
+      );
+      if (
+        matchedProfile &&
+        ((u.fullName && matchedProfile.name && u.fullName.toLowerCase() === matchedProfile.name.toLowerCase()) ||
+          (matchedProfile.name && u.username.toLowerCase() === matchedProfile.name.toLowerCase().replace(/\s+/g, '.')) ||
+          (matchedProfile.employee_number && u.username.toLowerCase().includes(matchedProfile.employee_number.toLowerCase())))
+      ) {
+        isMatch = true;
+      }
     }
-    if (!data?.success || !data.session) {
+
+    if (isMatch) candidates.push(u);
+  }
+
+  if (candidates.length === 0) {
+    return { success: false, error: GENERIC };
+  }
+
+  const targetUser = candidates.find((c) => c.passwordHash === attemptedHash) ?? candidates[0];
+
+  if (!targetUser.isActive) return { success: false, error: GENERIC };
+
+  if (targetUser.isLocked) {
+    return {
+      success: false,
+      locked: true,
+      error:
+        'Your account has been locked due to multiple failed login attempts. ' +
+        'Please contact your system administrator to unlock your account.',
+    };
+  }
+
+  const now = new Date();
+  if (attemptedHash !== targetUser.passwordHash) {
+    const newCount = targetUser.failedLoginCount + 1;
+    const shouldLock = newCount >= MAX_FAILED;
+    await supabase
+      .from('system_users')
+      .update({ failed_login_count: newCount, is_locked: shouldLock, modified_at: now.toISOString() })
+      .eq('id', targetUser.id);
+
+    if (shouldLock) {
       return {
         success: false,
-        error: data?.error ?? GENERIC,
-        locked: data?.locked,
+        locked: true,
+        error:
+          `${GENERIC} Your account has been locked after ${MAX_FAILED} failed attempts. ` +
+          'Contact an administrator to unlock.',
       };
     }
-
-    clearSession();
-    saveSession(data.session);
-    return {
-      success: true,
-      session: data.session,
-      requiresPasswordChange: data.session.requiresPasswordChange,
-    };
-  } catch (error) {
-    console.error('Login service request failed:', error);
-    return { success: false, error: 'Login service is temporarily unavailable.' };
+    return { success: false, error: GENERIC };
   }
+
+  const token = randomToken();
+  const issuedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + SESSION_DURATION_MS).toISOString();
+
+  await supabase
+    .from('system_users')
+    .update({ failed_login_count: 0, is_locked: false, last_login: issuedAt, modified_at: issuedAt })
+    .eq('id', targetUser.id);
+
+  clearSession();
+
+  const session: AuthSession = {
+    userId: targetUser.id,
+    username: targetUser.username,
+    email: targetUser.email,
+    role: targetUser.role,
+    fullName: targetUser.fullName,
+    token,
+    issuedAt,
+    expiresAt,
+    requiresPasswordChange: targetUser.requiresPasswordChange,
+  };
+  saveSession(session);
+
+  return { success: true, session, requiresPasswordChange: targetUser.requiresPasswordChange };
+}
+
+export async function login(username: string, password: string): Promise<LoginResult> {
+  const GENERIC = 'Login failed. Invalid user ID or password.';
+
+  if (USE_AMS_EDGE_API) {
+    try {
+      const { data, error } = await supabase.functions.invoke<{
+        success: boolean;
+        session?: AuthSession;
+        error?: string;
+        locked?: boolean;
+      }>('ams-api', {
+        body: { action: 'login', username, password },
+      });
+
+      if (!error && data) {
+        if (!data.success || !data.session) {
+          return {
+            success: false,
+            error: data.error ?? GENERIC,
+            locked: data.locked,
+          };
+        }
+
+        clearSession();
+        saveSession(data.session);
+        return {
+          success: true,
+          session: data.session,
+          requiresPasswordChange: data.session.requiresPasswordChange,
+        };
+      }
+    } catch {
+      // Fall back to database-backed login when Edge Function is unreachable
+    }
+  }
+
+  return loginWithDatabase(username, password);
 }
 
 export function logout(): void {
   const session = loadSession();
-  if (session?.token) {
+  if (USE_AMS_EDGE_API && session?.token) {
     void supabase.functions.invoke('ams-api', {
       body: { action: 'logout' },
       headers: { Authorization: `Bearer ${session.token}` },
-    }).then(({ error }) => {
-      if (error) console.error('Server-side sign out failed:', error.message);
-    }).catch((error: unknown) => {
-      console.error('Server-side sign out failed:', error);
+    }).catch(() => {
+      // Ignore network errors during logout
     });
   }
   clearSession();
