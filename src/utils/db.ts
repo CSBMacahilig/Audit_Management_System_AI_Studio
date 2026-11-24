@@ -314,7 +314,7 @@ export async function fetchEngagements(): Promise<AuditEngagement[]> {
   });
 }
 
-export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
+export async function upsertEngagement(eng: AuditEngagement): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const payload = {
@@ -365,19 +365,20 @@ export async function upsertEngagement(eng: AuditEngagement): Promise<void> {
       .upsert({ ...payload, audit_division_id: null });
     if (retryErr) {
       console.error('upsertEngagement:', retryErr.message);
-      return;
+      return retryErr.message;
     }
     await saveCustomDivisionAssignment('engagement', eng.id, eng.auditDivisionId);
-    return;
+    return null;
   }
   if (error) {
     console.error('upsertEngagement:', error.message);
-    return;
+    return error.message;
   }
   await saveCustomDivisionAssignment('engagement', eng.id, undefined);
+  return null;
 }
 
-export async function upsertWorkingNote(engagementId: string, note: WorkingNote): Promise<void> {
+export async function upsertWorkingNote(engagementId: string, note: WorkingNote): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('working_notes').upsert({
@@ -398,10 +399,14 @@ export async function upsertWorkingNote(engagementId: string, note: WorkingNote)
     modified_by: actor,
     modified_at: modifiedAt,
   });
-  if (error) console.error('upsertWorkingNote:', error.message);
+  if (error) {
+    console.error('upsertWorkingNote:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
-export async function upsertFinding(engagementId: string, finding: AuditFinding): Promise<void> {
+export async function upsertFinding(engagementId: string, finding: AuditFinding): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('findings').upsert({
@@ -424,7 +429,11 @@ export async function upsertFinding(engagementId: string, finding: AuditFinding)
     modified_by: actor,
     modified_at: modifiedAt,
   });
-  if (error) console.error('upsertFinding:', error.message);
+  if (error) {
+    console.error('upsertFinding:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
 export async function upsertTimelineActivity(engagementId: string, activity: TimelineActivity): Promise<void> {
@@ -491,7 +500,7 @@ export async function fetchIssues(): Promise<IssueRegisterItem[]> {
   return (data ?? []).map(rowToIssue);
 }
 
-export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
+export async function upsertIssue(issue: IssueRegisterItem): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('issues_register').upsert({
@@ -518,7 +527,11 @@ export async function upsertIssue(issue: IssueRegisterItem): Promise<void> {
     modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
-  if (error) console.error('upsertIssue:', error.message);
+  if (error) {
+    console.error('upsertIssue:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -538,7 +551,7 @@ export async function fetchUniverse(): Promise<UniverseEntity[]> {
   }));
 }
 
-export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void> {
+export async function upsertUniverseEntity(entity: UniverseEntity): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const payload = {
@@ -569,16 +582,17 @@ export async function upsertUniverseEntity(entity: UniverseEntity): Promise<void
       .upsert({ ...payload, audit_division_id: null });
     if (retryErr) {
       console.error('upsertUniverseEntity:', retryErr.message);
-      return;
+      return retryErr.message;
     }
     await saveCustomDivisionAssignment('universe', entity.id, entity.auditDivisionId);
-    return;
+    return null;
   }
   if (error) {
     console.error('upsertUniverseEntity:', error.message);
-    return;
+    return error.message;
   }
   await saveCustomDivisionAssignment('universe', entity.id, undefined);
+  return null;
 }
 
 export async function deleteUniverseEntity(id: string): Promise<void> {
@@ -628,7 +642,7 @@ export async function fetchUserProfiles(): Promise<UserProfile[]> {
   return (data ?? []).map(rowToUserProfile);
 }
 
-export async function upsertUserProfile(u: UserProfile): Promise<void> {
+export async function upsertUserProfile(u: UserProfile): Promise<string | null> {
   const actor = getCurrentAccountEmail();
   const modifiedAt = new Date().toISOString();
   const { error } = await supabase.from('user_profiles').upsert({
@@ -657,12 +671,20 @@ export async function upsertUserProfile(u: UserProfile): Promise<void> {
     modified_at: modifiedAt,
     updated_at: new Date().toISOString(),
   });
-  if (error) console.error('upsertUserProfile:', error.message);
+  if (error) {
+    console.error('upsertUserProfile:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
-export async function deleteUserProfile(id: string): Promise<void> {
+export async function deleteUserProfile(id: string): Promise<string | null> {
   const { error } = await supabase.from('user_profiles').delete().eq('id', id);
-  if (error) console.error('deleteUserProfile:', error.message);
+  if (error) {
+    console.error('deleteUserProfile:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

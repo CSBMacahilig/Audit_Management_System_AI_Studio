@@ -29,6 +29,7 @@ import {
 } from './components/AdditionalViews';
 import { LoginPage, ForcePasswordChange } from './components/LoginPage';
 import { AdminUserManagement } from './components/AdminUserManagement';
+import { BulkImportModal, BulkImportResult } from './components/BulkImportModal';
 import {
   canAccessTab,
   DEFAULT_ROLE_DEFINITIONS,
@@ -38,6 +39,7 @@ import {
 import { AccessGuard } from './components/AccessGuard';
 import {
   AuthSession,
+  adminAddUser,
   loadSession,
   logout,
   seedDefaultAdmin,
@@ -70,8 +72,15 @@ import {
 } from './utils/db';
 import { SizingConfig } from './data/auditData';
 import { canTransitionEngagementStatus, EngagementStatus } from './utils/brw';
-import { formatIdentifier, formatYearIdentifier } from './utils/identifiers';
+import { formatIdentifier, formatYearIdentifier, nextIdentifierSequence } from './utils/identifiers';
 import { getCurrentAccountEmail } from './utils/auditMetadata';
+import { formatDateForDisplay } from './utils/date';
+import {
+  BulkImportRow,
+  BulkImportTarget,
+  normalizeImportDate,
+  parseImportBoolean,
+} from './utils/bulkImport';
 import {
   DEFAULT_AUDIT_DIVISION_RISK_SCALES,
   getAuditCycleMonths,
@@ -104,6 +113,7 @@ export default function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Seed the default admin account (idempotent) and restore any existing session
   useEffect(() => {
@@ -210,6 +220,360 @@ export default function App() {
   const handleUpdateIssue = (issue: IssueRegisterItem) => {
     setIssues((prev) => prev.map((i) => i.id === issue.id ? issue : i));
     upsertIssue(issue);
+  };
+
+  const handleBulkImport = async (
+    target: BulkImportTarget,
+    rows: BulkImportRow[]
+  ): Promise<BulkImportResult> => {
+    const failures: BulkImportResult['failures'] = [];
+    const importedUniverse: UniverseEntity[] = [];
+    const importedProfiles: UserProfile[] = [];
+    const importedEngagements: AuditEngagement[] = [];
+    const importedIssues: IssueRegisterItem[] = [];
+    const engagementUpdates = new Map(engagements.map((engagement) => [engagement.id, engagement]));
+    const actor = currentUser?.name ?? authSession?.fullName ?? 'System User';
+    const actorEmail = getCurrentAccountEmail();
+
+    const getText = (row: BulkImportRow, key: string): string => row.values[key]?.trim() ?? '';
+    const requireNumber = (row: BulkImportRow, key: string): number => {
+      const value = Number(getText(row, key));
+      if (!Number.isFinite(value)) throw new Error(`${key} is not a valid number.`);
+      return value;
+    };
+    const requireDate = (row: BulkImportRow, key: string): string => {
+      const value = normalizeImportDate(getText(row, key));
+      if (!value) throw new Error(`${key} is not a valid date.`);
+      return value;
+    };
+    const findScale = (value: string) => auditDivisionRiskScales.find(
+      (scale) => scale.id.toLowerCase() === value.toLowerCase() ||
+        scale.name.toLowerCase() === value.toLowerCase()
+    );
+    const addMonths = (date: string, months: number): string => {
+      const due = new Date(`${date}T00:00:00.000Z`);
+      const day = due.getUTCDate();
+      due.setUTCDate(1);
+      due.setUTCMonth(due.getUTCMonth() + months);
+      const finalDay = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() + 1, 0)).getUTCDate();
+      due.setUTCDate(Math.min(day, finalDay));
+      return due.toISOString().slice(0, 10);
+    };
+
+    for (const row of rows) {
+      try {
+        const values = row.values;
+        if (target === 'universe') {
+          const scale = findScale(getText(row, 'audit_division'));
+          if (!scale) throw new Error('Configured audit division could not be resolved.');
+          const likelihood = requireNumber(row, 'likelihood');
+          const impact = requireNumber(row, 'impact');
+          const score = getText(row, 'risk_score')
+            ? requireNumber(row, 'risk_score')
+            : likelihood * impact;
+          const riskLevel = getAuditRiskLevel(score, scale.id, auditDivisionRiskScales);
+          const requestedCycle = getText(row, 'cycle_months');
+          const cycleMonths = requestedCycle
+            ? requireNumber(row, 'cycle_months')
+            : getAuditCycleMonths(riskLevel, scale.id, auditDivisionRiskScales, frequencies);
+          const lastAuditedIso = requireDate(row, 'last_audited');
+          const code = getText(row, 'code') || formatIdentifier(
+            'AU',
+            nextIdentifierSequence([...universe, ...importedUniverse], 'AU')
+          );
+          const entity: UniverseEntity = {
+            id: code.toLowerCase(),
+            code,
+            name: getText(row, 'name'),
+            division: getText(row, 'division'),
+            auditDivisionId: scale.id,
+            category: getText(row, 'entity_type'),
+            likelihood,
+            impact,
+            riskScore: score,
+            riskLevel,
+            lastAudited: formatDateForDisplay(lastAuditedIso),
+            nextDue: formatDateForDisplay(addMonths(lastAuditedIso, cycleMonths)),
+            cycleMonths,
+            defaultLead: getText(row, 'default_lead'),
+            riskNotes: getText(row, 'risk_notes'),
+            addedBy: actorEmail,
+            modifiedBy: actorEmail,
+            modifiedAt: new Date().toISOString(),
+          };
+          const error = await upsertUniverseEntity(entity);
+          if (error) throw new Error(error);
+          importedUniverse.push(entity);
+        } else if (target === 'profiles') {
+          const name = getText(row, 'name');
+          const roleTitle = getText(row, 'role_title');
+          const id = formatIdentifier(
+            'IA',
+            nextIdentifierSequence([...userProfiles, ...importedProfiles], 'IA')
+          ).toLowerCase();
+          const profile: UserProfile = {
+            id,
+            name,
+            email: getText(row, 'email').toLowerCase(),
+            roleTitle,
+            fullLabel: `${name} – ${roleTitle}`,
+            headerSubtitle: getText(row, 'header_subtitle') || roleTitle,
+            department: getText(row, 'department'),
+            canApproveHead: parseImportBoolean(getText(row, 'can_approve_head')),
+            canApproveIndependent: parseImportBoolean(getText(row, 'can_approve_independent')),
+            canApproveCAE: parseImportBoolean(getText(row, 'can_approve_cae')),
+            employeeNumber: getText(row, 'employee_number'),
+            accountStatus: 'Active',
+            failedLoginCount: 0,
+            isLocked: false,
+            requiresPasswordChange: false,
+            passwordHistory: [],
+            mfaEnabled: false,
+            isPrivileged: false,
+          };
+          const error = await upsertUserProfile(profile);
+          if (error) throw new Error(error);
+          const username = getText(row, 'username');
+          if (username) {
+            if (!authSession || authSession.role !== 'admin') {
+              const rollbackError = await deleteUserProfile(profile.id);
+              if (rollbackError) importedProfiles.push(profile);
+              throw new Error(
+                rollbackError
+                  ? `Login creation requires an admin; profile rollback also failed: ${rollbackError}`
+                  : 'Login creation requires an admin. The imported profile was rolled back.'
+              );
+            }
+            const accountResult = await adminAddUser(authSession, {
+              username,
+              fullName: profile.name,
+              email: profile.email ?? '',
+              role: 'user',
+              password: getText(row, 'initial_password'),
+            });
+            if (!accountResult.success) {
+              const rollbackError = await deleteUserProfile(profile.id);
+              if (rollbackError) importedProfiles.push(profile);
+              throw new Error(
+                rollbackError
+                  ? `Login creation failed (${accountResult.error ?? 'unknown error'}); profile rollback also failed: ${rollbackError}`
+                  : `Login creation failed: ${accountResult.error ?? 'unknown error'}. The imported profile was rolled back.`
+              );
+            }
+          }
+          importedProfiles.push(profile);
+        } else if (target === 'annual_plan') {
+          const entity = universe.find(
+            (item) => item.code.toLowerCase() === getText(row, 'entity_code').toLowerCase()
+          );
+          const scale = findScale(getText(row, 'audit_division'));
+          if (!entity) throw new Error('Audit Universe entity could not be resolved.');
+          if (!scale) throw new Error('Configured audit division could not be resolved.');
+          const startDate = requireDate(row, 'start_date');
+          const endDate = requireDate(row, 'end_date');
+          const year = getText(row, 'year') ? requireNumber(row, 'year') : Number(startDate.slice(0, 4));
+          const yearEngagements = [...engagements, ...importedEngagements].filter((engagement) => engagement.year === year);
+          const nextSequence = Math.max(
+            0,
+            ...yearEngagements.map((engagement) => {
+              const match = engagement.ref.match(new RegExp(`^AE-${year}-(\\d+)$`, 'i'));
+              return match ? Number(match[1]) : 0;
+            })
+          ) + 1;
+          const ref = getText(row, 'ref') || formatYearIdentifier('AE', year, nextSequence);
+          const likelihood = requireNumber(row, 'likelihood');
+          const impact = requireNumber(row, 'impact');
+          const riskScore = likelihood * impact;
+          const riskLevel = getAuditRiskLevel(riskScore, scale.id, auditDivisionRiskScales);
+          const fieldworkWeeks = getAuditFieldworkWeeks(riskLevel, scale.id, auditDivisionRiskScales);
+          const budgetedHours = requireNumber(row, 'budgeted_hours');
+          const title = getText(row, 'title');
+          const engagement: AuditEngagement = {
+            id: ref.toLowerCase(),
+            ref,
+            year,
+            title,
+            category: getText(row, 'audit_type'),
+            department: entity.division,
+            auditDivisionId: scale.id,
+            entityName: entity.name,
+            likelihood,
+            impact,
+            riskScore,
+            riskLevel,
+            lead: getText(row, 'lead'),
+            headReviewer: getText(row, 'head_reviewer'),
+            independentReviewer: getText(row, 'independent_reviewer') || 'Not needed',
+            startDate,
+            endDate,
+            objectives: getText(row, 'objectives'),
+            scope: getText(row, 'scope'),
+            criteria: getText(row, 'criteria'),
+            addresseeName: getText(row, 'addressee_name'),
+            addresseeTitle: getText(row, 'addressee_title'),
+            copyFurnished: getText(row, 'copy_furnished'),
+            durationDays: Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1,
+            budgetedHours,
+            status: getText(row, 'status'),
+            readyRatio: '0/9 ready',
+            lifecycleStage: 1,
+            fieldworkPct: 0,
+            fieldworkDayCurrent: 0,
+            fieldworkDayTotal: fieldworkWeeks * 5,
+            reportStatus: 'Draft',
+            reportRef: ref.replace(/^AE-/i, 'IA-') + '-RPT',
+            executiveSummary: getText(row, 'executive_summary') || getText(row, 'objectives'),
+            addedBy: actorEmail,
+            modifiedBy: actorEmail,
+            modifiedAt: new Date().toISOString(),
+            workingNotes: [],
+            findings: [],
+            timelineActivities: [],
+            files: [],
+            activityLog: [{
+              id: formatIdentifier('AL', 1).toLowerCase(),
+              timestamp: new Date().toLocaleString('en-GB'),
+              actor,
+              action: `${ref} imported into the Annual Audit Plan`,
+            }],
+          };
+          const error = await upsertEngagement(engagement);
+          if (error) throw new Error(error);
+          importedEngagements.push(engagement);
+        } else if (target === 'working_notes') {
+          const engagement = [...engagementUpdates.values()].find(
+            (item) => item.ref.toLowerCase() === getText(row, 'audit_ref').toLowerCase() ||
+              item.id.toLowerCase() === getText(row, 'audit_ref').toLowerCase()
+          );
+          if (!engagement) throw new Error('Engagement could not be resolved.');
+          const ref = getText(row, 'ref') || formatIdentifier(
+            'WP',
+            nextIdentifierSequence(engagement.workingNotes, 'WP')
+          );
+          const conclusion = getText(row, 'conclusion');
+          const note: WorkingNote = {
+            id: ref.toLowerCase(),
+            ref,
+            title: getText(row, 'title'),
+            controlArea: getText(row, 'control_area'),
+            author: getText(row, 'author') || actor,
+            status: (getText(row, 'status') || 'Draft') as WorkingNote['status'],
+            hasException: conclusion === 'Exception noted',
+            updatedAt: new Date().toISOString(),
+            testingProcedure: getText(row, 'testing_procedure'),
+            observations: getText(row, 'observations'),
+            conclusion,
+            addedBy: actorEmail,
+            modifiedBy: actorEmail,
+            modifiedAt: new Date().toISOString(),
+          };
+          const error = await upsertWorkingNote(engagement.id, note);
+          if (error) throw new Error(error);
+          engagementUpdates.set(engagement.id, {
+            ...engagement,
+            workingNotes: [...engagement.workingNotes, note],
+          });
+        } else if (target === 'findings') {
+          const engagement = [...engagementUpdates.values()].find(
+            (item) => item.ref.toLowerCase() === getText(row, 'audit_ref').toLowerCase() ||
+              item.id.toLowerCase() === getText(row, 'audit_ref').toLowerCase()
+          );
+          if (!engagement) throw new Error('Engagement could not be resolved.');
+          const ref = getText(row, 'ref') || formatIdentifier(
+            'FN',
+            nextIdentifierSequence(engagement.findings, 'FN')
+          );
+          const finding: AuditFinding = {
+            id: ref.toLowerCase(),
+            ref,
+            title: getText(row, 'title'),
+            severity: getText(row, 'severity'),
+            category: getText(row, 'category'),
+            condition: getText(row, 'condition'),
+            criteria: getText(row, 'criteria'),
+            cause: getText(row, 'cause'),
+            effect: getText(row, 'effect'),
+            recommendation: getText(row, 'recommendation'),
+            owner: getText(row, 'owner'),
+            targetDate: formatDateForDisplay(requireDate(row, 'target_date')),
+            status: 'Open',
+            linkedNoteRef: getText(row, 'linked_note_ref'),
+            addedBy: actorEmail,
+            modifiedBy: actorEmail,
+            modifiedAt: new Date().toISOString(),
+          };
+          const error = await upsertFinding(engagement.id, finding);
+          if (error) throw new Error(error);
+          engagementUpdates.set(engagement.id, {
+            ...engagement,
+            findings: [...engagement.findings, finding],
+          });
+        } else {
+          const engagement = [...engagementUpdates.values()].find(
+            (item) => item.ref.toLowerCase() === getText(row, 'audit_ref').toLowerCase() ||
+              item.id.toLowerCase() === getText(row, 'audit_ref').toLowerCase()
+          );
+          if (!engagement) throw new Error('Engagement could not be resolved.');
+          const originalDueIso = requireDate(row, 'original_due');
+          const currentDueIso = getText(row, 'current_due')
+            ? requireDate(row, 'current_due')
+            : originalDueIso;
+          const status = (getText(row, 'status') || 'Open') as IssueRegisterItem['status'];
+          const today = new Date().toISOString().slice(0, 10);
+          const dayDifference = Math.ceil(
+            (Date.parse(`${currentDueIso}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
+          );
+          const ref = getText(row, 'ref') || formatIdentifier(
+            'IS',
+            nextIdentifierSequence([...issues, ...importedIssues], 'IS')
+          );
+          const issue: IssueRegisterItem = {
+            id: ref.toLowerCase(),
+            ref,
+            title: getText(row, 'title'),
+            auditRef: engagement.ref,
+            auditTitle: engagement.title,
+            severity: getText(row, 'severity'),
+            owner: getText(row, 'owner'),
+            ownerUnit: getText(row, 'owner_unit'),
+            originalDue: formatDateForDisplay(originalDueIso),
+            currentDue: formatDateForDisplay(currentDueIso),
+            extensionCount: getText(row, 'extension_count') ? requireNumber(row, 'extension_count') : 0,
+            daysStatus: status === 'Closed'
+              ? `Closed ${formatDateForDisplay(today)}`
+              : dayDifference < 0
+                ? `${Math.abs(dayDifference)} days overdue`
+                : `${dayDifference} days remaining`,
+            isOverdue: status !== 'Closed' && dayDifference < 0,
+            isDueSoon: status !== 'Closed' && dayDifference >= 0 && dayDifference <= 30,
+            status,
+            actionPlanSummary: getText(row, 'action_plan_summary'),
+            evidenceNote: getText(row, 'evidence_note') || undefined,
+            addedBy: actorEmail,
+            modifiedBy: actorEmail,
+            modifiedAt: new Date().toISOString(),
+          };
+          const error = await upsertIssue(issue);
+          if (error) throw new Error(error);
+          importedIssues.push(issue);
+        }
+      } catch (error) {
+        failures.push({
+          line: row.line,
+          message: error instanceof Error ? error.message : 'Row could not be imported.',
+        });
+      }
+    }
+
+    if (importedUniverse.length) setUniverse((previous) => [...importedUniverse, ...previous]);
+    if (importedProfiles.length) setUserProfiles((previous) => [...importedProfiles, ...previous]);
+    if (importedEngagements.length) setEngagements((previous) => [...importedEngagements, ...previous]);
+    if (target === 'working_notes' || target === 'findings') {
+      setEngagements((previous) => previous.map((engagement) => engagementUpdates.get(engagement.id) ?? engagement));
+    }
+    if (importedIssues.length) setIssues((previous) => [...importedIssues, ...previous]);
+
+    return { imported: rows.length - failures.length, failures };
   };
 
   const handleAddUniverseEntity = (entity: UniverseEntity) => {
@@ -866,6 +1230,18 @@ export default function App() {
     );
   }
 
+  const accessRole = currentUser?.headerSubtitle || currentUser?.roleTitle || '';
+  const canImportTab = (tab: MainTabId) =>
+    authSession.role === 'admin' ||
+    canAccessTab(accessRole, tab, accessActive, permissionMatrix).allowed;
+  const bulkImportTargets: BulkImportTarget[] = [
+    ...(canImportTab('universe') ? ['universe' as const] : []),
+    ...(authSession.role === 'admin' ? ['profiles' as const] : []),
+    ...(canImportTab('annual-plan') ? ['annual_plan' as const] : []),
+    ...(canImportTab('fieldwork') ? ['working_notes' as const, 'findings' as const] : []),
+    ...(canImportTab('issues') ? ['issues' as const] : []),
+  ];
+
   // ── Authenticated app ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#E8E2F4] text-slate-900 pb-16">
@@ -874,6 +1250,19 @@ export default function App() {
         <AdminUserManagement
           session={authSession}
           onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+      {showBulkImport && bulkImportTargets.length > 0 && (
+        <BulkImportModal
+          targets={bulkImportTargets}
+          universe={universe}
+          engagements={engagements}
+          userProfiles={userProfiles}
+          issues={issues}
+          riskScales={auditDivisionRiskScales}
+          currentUser={currentUser ?? FALLBACK_USER}
+          onImport={handleBulkImport}
+          onClose={() => setShowBulkImport(false)}
         />
       )}
 
@@ -913,6 +1302,14 @@ export default function App() {
       />
 
       <main className="w-full max-w-[1220px] mx-auto px-4 sm:px-6 mt-2">
+        {bulkImportTargets.length > 0 && (
+          <div className="mb-3 flex justify-end">
+            <button type="button" onClick={() => setShowBulkImport(true)}
+              className="rounded-md border border-[#492785] bg-white px-3.5 py-2 text-xs font-semibold text-[#492785] hover:bg-purple-50">
+              Bulk import
+            </button>
+          </div>
+        )}
         {(() => {
           const tabCheck = canAccessTab(
             currentUser?.headerSubtitle || currentUser?.roleTitle,
